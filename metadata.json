@@ -1,0 +1,6 @@
+{
+  "name": "SoundSpire",
+  "description": "SoundSpire is a music discovery and artist community platform where music fans discover new indie talents and artists share exclusive performances and sessions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
