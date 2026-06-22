@@ -1,4 +1,14 @@
 import java.util.Base64
+import java.util.Properties
+
+// Load release signing secrets from keystore.properties (gitignored) if present.
+// Env vars (KEYSTORE_PATH / STORE_PASSWORD / KEY_PASSWORD) take precedence for CI.
+val keystoreProps = Properties().apply {
+  val f = rootProject.file("keystore.properties")
+  if (f.exists()) f.inputStream().use { load(it) }
+}
+fun signingValue(envKey: String, propKey: String): String? =
+  System.getenv(envKey) ?: keystoreProps.getProperty(propKey)
 
 plugins {
   alias(libs.plugins.android.application)
@@ -6,6 +16,7 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
+  alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -16,8 +27,8 @@ android {
     applicationId = "com.aistudio.soundspire.vsqtyz"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.0"
+    versionCode = 6
+    versionName = "1.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -45,11 +56,13 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      val keystorePath = System.getenv("KEYSTORE_PATH")
+        ?: keystoreProps.getProperty("STORE_FILE")?.let { "${rootDir}/$it" }
+        ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD")
+      storePassword = signingValue("STORE_PASSWORD", "STORE_PASSWORD")
+      keyAlias = signingValue("KEY_ALIAS", "KEY_ALIAS") ?: "upload"
+      keyPassword = signingValue("KEY_PASSWORD", "KEY_PASSWORD")
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
@@ -110,9 +123,15 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.androidx.navigation.compose)
-  implementation(libs.androidx.room.ktx)
-  implementation(libs.androidx.room.runtime)
+  // implementation(libs.androidx.room.ktx)
+  // implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
+  implementation(libs.credentials)
+  implementation(libs.credentials.play.services.auth)
+  implementation(libs.googleid)
+  implementation(libs.supabase.postgrest)
+  implementation(libs.supabase.realtime)
+  implementation(libs.ktor.client.okhttp)
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   implementation(libs.kotlinx.coroutines.android)
@@ -138,7 +157,7 @@ dependencies {
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
-  "ksp"(libs.androidx.room.compiler)
+  // "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }
 
@@ -184,4 +203,18 @@ tasks.matching {
   it.name.contains("package", ignoreCase = true)
 }.configureEach {
   dependsOn(decodeDebugKeystore)
+}
+
+// Copy the signed release APK to a versioned, shareable name in a separate dist/ dir
+// (kept out of outputs/apk/release to avoid clashing with Android's own listing tasks).
+val versionedReleaseApk = tasks.register<Copy>("versionedReleaseApk") {
+  val versionName = android.defaultConfig.versionName ?: "1.0"
+  from("${layout.buildDirectory.get()}/outputs/apk/release/app-release.apk")
+  into("${layout.buildDirectory.get()}/dist")
+  rename { "soundspire-v$versionName.apk" }
+  mustRunAfter("assembleRelease")
+  doLast { logger.lifecycle("Shareable APK: app/build/dist/soundspire-v$versionName.apk") }
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+  finalizedBy(versionedReleaseApk)
 }

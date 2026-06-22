@@ -1,69 +1,34 @@
 package com.example.ui.theme
 
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme =
-  darkColorScheme(
-    primary = SoundSpireNeonTeal,
-    secondary = SoundSpireVibrantBlue,
-    tertiary = SoundSpireAccentPurple,
-    background = MidnightBlack,
-    surface = DarkGreySurface,
-    onPrimary = Color(0xFF042F1A),
-    onSecondary = Color(0xFF003554),
-    onTertiary = Color(0xFF2E004F),
-    onBackground = TextPrimary,
-    onSurface = TextPrimary,
-    surfaceVariant = CardBackground,
-    onSurfaceVariant = TextSecondary,
-    error = ErrorRed,
-    onError = Color.White
-  )
-
-private val LightColorScheme =
-  lightColorScheme(
-    primary = SoundSpireNeonTeal,
-    secondary = SoundSpireVibrantBlue,
-    tertiary = SoundSpireAccentPurple,
-    background = SlateBackground,
-    surface = DarkGreySurface,
+private val SoundSpireColorScheme = darkColorScheme(
+    primary = AccentOrange,
     onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = TextPrimary,
-    onSurface = TextPrimary,
+    secondary = SubheadingPeach,
+    onSecondary = Color.Black,
+    tertiary = HeadingPeach,
+    background = BackgroundDarkPurple,
+    onBackground = TextWhite,
+    surface = BackgroundMidPurple,
+    onSurface = TextWhite,
     surfaceVariant = CardBackground,
-    onSurfaceVariant = TextSecondary,
+    onSurfaceVariant = TextMuted,
     error = ErrorRed,
-    onError = Color.White
-  )
+    onError = Color.White,
+    outline = CardBorder,
+)
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic color is available on Android 12+
-  dynamicColor: Boolean = true,
-  content: @Composable () -> Unit,
+    content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
-    }
-
-  MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
+    MaterialTheme(
+        colorScheme = SoundSpireColorScheme,
+        typography = Typography,
+        content = content,
+    )
 }

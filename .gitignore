@@ -16,3 +16,8 @@
 local.properties
 .env
 debug.keystore
+# Release signing — NEVER commit these
+my-upload-key.jks
+*.jks
+keystore.properties
+*.apk

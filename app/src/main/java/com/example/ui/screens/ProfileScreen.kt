@@ -1,11 +1,8 @@
 package com.example.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import com.example.ui.components.TText
+
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,43 +10,32 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Comment
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Message
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.RateReview
-import androidx.compose.material.icons.filled.Reply
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,716 +47,448 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.data.model.Artist
-import com.example.data.model.Comment
-import com.example.data.model.Review
-import com.example.ui.components.VideoPlayer
+import com.example.data.remote.ApiClient
+import com.example.data.remote.CommunitySubscription
+import com.example.data.remote.ProfileResponse
+import com.example.ui.theme.AccentOrange
+import com.example.ui.theme.BackgroundDarkPurple
+import com.example.ui.theme.BackgroundMidPurple
 import com.example.ui.theme.CardBackground
-import com.example.ui.theme.MidnightBlack
-import com.example.ui.theme.GoldStar
-import com.example.ui.theme.SoundSpireAccentPurple
-import com.example.ui.theme.SoundSpireNeonTeal
-import com.example.ui.theme.SoundSpireVibrantBlue
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
-import com.example.ui.viewmodel.SoundSpireViewModel
+import com.example.ui.theme.ErrorRed
+import com.example.ui.theme.HeadingPeach
+import com.example.ui.theme.SubheadingPeach
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextWhite
+import com.example.ui.viewmodel.AuthViewModel
+import com.example.util.defaultProfileImageUrl
+import com.example.util.resolveImageUrl
+import com.example.data.remote.ProfileUpdateRequest
+import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProfileScreen(
-    viewModel: SoundSpireViewModel,
-    modifier: Modifier = Modifier
+    authViewModel: AuthViewModel,
+    onLogout: () -> Unit,
+    onSwitchToArtist: () -> Unit = {},
+    onSettings: () -> Unit = {},
 ) {
-    val artist by viewModel.activeArtist.collectAsState()
-    val reviews by viewModel.activeReviews.collectAsState()
-    val comments by viewModel.activeComments.collectAsState()
+    val context = LocalContext.current
+    val api = remember { ApiClient.getService(context) }
+    val currentUser by authViewModel.currentUser.collectAsState()
 
-    var activeTab by remember { mutableStateOf("stream") } // "stream", "reviews", "discussions"
+    var profile by remember { mutableStateOf<ProfileResponse?>(null) }
+    var subscriptions by remember { mutableStateOf<List<CommunitySubscription>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var isEditing by remember { mutableStateOf(false) }
 
-    if (artist == null) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .background(MidnightBlack),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("Select an artist from discover...", color = TextSecondary)
-        }
-        return
+    LaunchedEffect(currentUser) {
+        val email = currentUser?.email ?: return@LaunchedEffect
+        try {
+            profile = api.getProfile(email)
+            val userId = currentUser?.id ?: return@LaunchedEffect
+            subscriptions = api.getSubscriptions(userId).communities
+        } catch (_: Exception) { }
+        loading = false
     }
 
-    val currentArtist = artist!!
-
-    Column(
-        modifier = modifier
+    LazyColumn(
+        modifier = Modifier
             .fillMaxSize()
-            .background(MidnightBlack)
+            .background(Brush.verticalGradient(listOf(BackgroundDarkPurple, BackgroundMidPurple, BackgroundDarkPurple))),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
     ) {
-        // Slim Header Details
-        ProfileHeader(
-            artistName = currentArtist.name,
-            onBackClick = { viewModel.selectArtist(null) }
-        )
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 32.dp)
-        ) {
-            // Hero Banner & Overlap Avatar
-            item {
-                ArtistCoverHero(artist = currentArtist)
-            }
-
-            // Bio description block
-            item {
-                Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+        // Header
+        item {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                TText("PROFILE", color = HeadingPeach, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = TextWhite,
+                        modifier = Modifier.size(24.dp).clickable { onSettings() }
+                    )
+                    OutlinedButton(
+                        onClick = { authViewModel.logout(onLogout) },
+                        shape = RoundedCornerShape(8.dp),
+                        border = ButtonDefaults.outlinedButtonBorder,
                     ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    text = currentArtist.name,
-                                    color = TextPrimary,
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                if (currentArtist.isVerified) {
-                                    Icon(
-                                        imageVector = Icons.Default.Verified,
-                                        contentDescription = "Verified Channels",
-                                        tint = SoundSpireNeonTeal,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "Genres: ${currentArtist.genres}",
-                                color = TextSecondary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Rating badge
-                        Row(
-                            modifier = Modifier
-                                .background(CardBackground, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = GoldStar,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (currentArtist.ratingCount > 0) String.format("%.1f", currentArtist.averageRating) else "0.0",
-                                color = TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
+                        TText("Logout", color = TextWhite, fontSize = 13.sp)
                     }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Text(
-                        text = currentArtist.bio,
-                        color = TextSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    )
+                    Button(
+                        onClick = { isEditing = !isEditing },
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        TText("Edit", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    }
                 }
             }
+            Spacer(modifier = Modifier.height(20.dp))
+        }
 
-            // Interactive Sections Tabs
+        if (loading) {
             item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 10.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(CardBackground)
-                        .padding(2.dp)
-                ) {
-                    TabPill(
-                        title = "Live Stream",
-                        isActive = activeTab == "stream",
-                        icon = Icons.Default.GraphicEq,
-                        onClick = { activeTab = "stream" },
-                        modifier = Modifier.weight(1f),
-                        testTag = "tab_stream"
-                    )
-                    TabPill(
-                        title = "Fan Reviews (${reviews.size})",
-                        isActive = activeTab == "reviews",
-                        icon = Icons.Default.RateReview,
-                        onClick = { activeTab = "reviews" },
-                        modifier = Modifier.weight(1f),
-                        testTag = "tab_reviews"
-                    )
-                    TabPill(
-                        title = "Discuss (${comments.size})",
-                        isActive = activeTab == "discussions",
-                        icon = Icons.AutoMirrored.Filled.Comment,
-                        onClick = { activeTab = "discussions" },
-                        modifier = Modifier.weight(1f),
-                        testTag = "tab_discuss"
-                    )
+                Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AccentOrange, modifier = Modifier.size(32.dp))
                 }
             }
-
-            // Tab Panels render
-            when (activeTab) {
-                "stream" -> {
-                    item {
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Text(
-                                text = "ACTIVE LIVE STREAM & PERFORMANCE",
-                                color = SoundSpireVibrantBlue,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                            VideoPlayer(
-                                videoUrl = currentArtist.videoUrl,
-                                title = currentArtist.featuredTrackTitle,
-                                modifier = Modifier.fillMaxWidth().testTag("active_video_player")
-                            )
-
-                            Spacer(modifier = Modifier.height(14.dp))
-                            Text(
-                                text = "Artist Setup Details",
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 13.sp
-                            )
-                            Text(
-                                text = "Feel free to check out reviews or write comments in the tabs. SoundSpire converts uploaded raw tracks to responsive streaming units dynamically.",
-                                color = TextSecondary,
-                                fontSize = 10.sp,
-                                lineHeight = 14.sp,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
-
-                "reviews" -> {
-                    // Reviews Posting Block
-                    item {
-                        ReviewsFormPanel(
-                            artistId = currentArtist.id,
-                            onSubmit = { rating, comment ->
-                                viewModel.submitReview(currentArtist.id, rating, comment)
-                            }
-                        )
-                    }
-
-                    item {
-                        Text(
-                            text = "COMMUNITY FEEDBACK",
-                            color = SoundSpireAccentPurple,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 8.dp)
-                        )
-                    }
-
-                    if (reviews.isEmpty()) {
-                        item {
-                            Text(
-                                "No fan reviews launched yet. Be the first to rate standard!",
-                                color = TextSecondary,
-                                fontSize = 12.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth().padding(32.dp)
-                            )
-                        }
-                    } else {
-                        items(reviews) { review ->
-                            ReviewItemRow(review = review)
-                        }
-                    }
-                }
-
-                "discussions" -> {
-                    // Discussion comments listing with nested replies
-                    item {
-                        DiscussionsFormPanel(
-                            artistId = currentArtist.id,
-                            comments = comments,
-                            onSubmit = { commentText, parentId ->
-                                viewModel.submitComment(currentArtist.id, commentText, parentId)
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProfileHeader(
-    artistName: String,
-    onBackClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(CardBackground)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        IconButton(
-            onClick = onBackClick,
-            modifier = Modifier.testTag("profile_back_button")
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "Back",
-                tint = SoundSpireNeonTeal
-            )
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "$artistName Studio",
-            color = TextPrimary,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-private fun ArtistCoverHero(artist: Artist) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(180.dp)
-    ) {
-        // Banner images
-        AsyncImage(
-            model = artist.bannerUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-        )
-
-        // Shade overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f))
-                    )
-                )
-        )
-
-        // Overlapping Profile Avatar (Offset strictly aligned downwards)
-        AsyncImage(
-            model = artist.avatarUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .offset(x = 20.dp, y = 20.dp)
-                .size(76.dp)
-                .clip(CircleShape)
-                .border(3.dp, MidnightBlack, CircleShape)
-                .border(4.dp, SoundSpireNeonTeal, CircleShape)
-        )
-    }
-    // Vertical Spacer to compensate offset push
-    Spacer(modifier = Modifier.height(24.dp))
-}
-
-@Composable
-private fun TabPill(
-    title: String,
-    isActive: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    testTag: String = ""
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (isActive) SoundSpireNeonTeal else Color.Transparent)
-            .clickable { onClick() }
-            .padding(vertical = 8.dp)
-            .testTag(testTag),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isActive) MidnightBlack else TextSecondary,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = title,
-                color = if (isActive) MidnightBlack else TextPrimary,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@Composable
-private fun ReviewsFormPanel(
-    artistId: String,
-    onSubmit: (Int, String) -> Unit
-) {
-    var textReview by remember { mutableStateOf("") }
-    var ratingChosen by remember { mutableStateOf(5) }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(
-                text = "SUBMIT FAN REVIEW",
-                color = SoundSpireVibrantBlue,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 10.dp)
-            )
-
-            // Dynamic stars selector layout
-            Row(
-                modifier = Modifier.padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                for (starIndex in 1..5) {
-                    val active = starIndex <= ratingChosen
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = "Star $starIndex",
-                        tint = if (active) GoldStar else Color.LightGray.copy(alpha = 0.4f),
+        } else {
+            // Avatar + Name
+            item {
+                val profileImageUrl = resolveImageUrl(profile?.profile_picture_url ?: currentUser?.photoURL) ?: defaultProfileImageUrl()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    AsyncImage(
+                        model = profileImageUrl,
+                        contentDescription = "Profile picture",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(28.dp)
-                            .clickable { ratingChosen = starIndex }
-                            .testTag("star_select_$starIndex")
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color.DarkGray)
                     )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = textReview,
-                    onValueChange = { textReview = it },
-                    placeholder = { Text("Write your concert feedback, synth reviews...", fontSize = 11.sp, color = TextSecondary) },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("text_review_field"),
-                    shape = RoundedCornerShape(8.dp),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SoundSpireNeonTeal)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        if (textReview.isNotBlank()) {
-                            onSubmit(ratingChosen, textReview)
-                            textReview = ""
-                        }
-                    },
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(SoundSpireNeonTeal, RoundedCornerShape(8.dp))
-                        .testTag("submit_review_button")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Send,
-                        contentDescription = "Submit",
-                        tint = MidnightBlack,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReviewItemRow(review: Review) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 6.dp)
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = review.fanName,
-                    color = SoundSpireNeonTeal,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                // Ratings star string
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    for (i in 1..5) {
-                        val color = if (i <= review.rating) GoldStar else Color.Transparent
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = if (i <= review.rating) GoldStar else Color.LightGray.copy(alpha = 0.2f),
-                            modifier = Modifier.size(10.dp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column {
+                        TText(
+                            text = profile?.full_name ?: currentUser?.name ?: "User",
+                            color = TextWhite,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.SemiBold,
                         )
+                        TText(
+                            text = "@${profile?.username ?: currentUser?.email?.substringBefore("@") ?: ""}",
+                            color = SubheadingPeach,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // Info fields
+            item {
+                if (isEditing) {
+                    EditableProfileForm(
+                        profile = profile,
+                        email = currentUser?.email,
+                        api = api,
+                        onSaved = { updatedProfile ->
+                            profile = updatedProfile
+                            isEditing = false
+                        },
+                        onCancel = { isEditing = false }
+                    )
+                } else {
+                    ProfileInfoGrid(profile, currentUser?.email)
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
+            // Subscriptions
+            if (subscriptions.isNotEmpty()) {
+                item {
+                    HorizontalDivider(color = TextMuted.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    TText("My Subscriptions", color = TextWhite, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                item {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        items(subscriptions) { sub ->
+                            val subImg = resolveImageUrl(sub.artist_profile_picture_url ?: sub.artist_cover_photo_url) ?: defaultProfileImageUrl()
+                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.dp)) {
+                                AsyncImage(
+                                    model = subImg,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size(64.dp).clip(CircleShape).background(Color.DarkGray)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TText(sub.name ?: "", color = TextWhite, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                            }
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            // Artist mode
+            if (currentUser?.isAlsoArtist == true) {
+                item {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    HorizontalDivider(color = TextMuted.copy(alpha = 0.2f))
+                    Spacer(modifier = Modifier.height(20.dp))
+                    TText("Artist Mode", color = Color(0xFFA855F6), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TText("You have an artist profile. Switch to manage your community, posts, and fans.", color = TextMuted, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onSwitchToArtist,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                        shape = RoundedCornerShape(8.dp),
+                    ) {
+                        TText("Switch to Artist Dashboard", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            }
 
-            Text(
-                text = review.comment,
-                color = TextPrimary,
-                fontSize = 11.sp,
-                lineHeight = 15.sp
-            )
+            // Danger zone — only for non-artists (matches website)
+            if (currentUser?.isAlsoArtist != true) item {
+                var showDeleteDialog by remember { mutableStateOf(false) }
+                var deleteInput by remember { mutableStateOf("") }
+                var deleting by remember { mutableStateOf(false) }
+
+                Spacer(modifier = Modifier.height(32.dp))
+                HorizontalDivider(color = TextMuted.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(20.dp))
+                TText("Danger Zone", color = ErrorRed, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                TText("Permanently delete your account and all associated data. This cannot be undone.", color = TextMuted, fontSize = 13.sp)
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = { showDeleteDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                    shape = RoundedCornerShape(8.dp),
+                ) {
+                    TText("Delete My Account", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                if (showDeleteDialog) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showDeleteDialog = false; deleteInput = "" },
+                        title = { TText("Are you sure?", color = ErrorRed, fontWeight = FontWeight.Bold) },
+                        text = {
+                            Column {
+                                TText("This will permanently delete your account, preferences, reviews, comments, and all data.", color = TextWhite, fontSize = 13.sp)
+                                Spacer(modifier = Modifier.height(12.dp))
+                                TText("Type \"confirm delete\" to proceed:", color = ErrorRed, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = deleteInput,
+                                    onValueChange = { deleteInput = it },
+                                    placeholder = { TText("confirm delete") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    if (deleteInput != "confirm delete") return@Button
+                                    deleting = true
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        try {
+                                            api.deleteAccount()
+                                            authViewModel.logout(onLogout)
+                                        } catch (_: Exception) { }
+                                        deleting = false
+                                    }
+                                },
+                                enabled = deleteInput == "confirm delete" && !deleting,
+                                colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                            ) {
+                                TText(if (deleting) "Deleting..." else "Delete!", color = Color.White)
+                            }
+                        },
+                        dismissButton = {
+                            OutlinedButton(onClick = { showDeleteDialog = false; deleteInput = "" }) {
+                                TText("Cancel", color = TextWhite)
+                            }
+                        },
+                        containerColor = Color(0xFF1F2937),
+                    )
+                }
+                Spacer(modifier = Modifier.height(32.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun DiscussionsFormPanel(
-    artistId: String,
-    comments: List<Comment>,
-    onSubmit: (String, String?) -> Unit
+private fun EditableProfileForm(
+    profile: ProfileResponse?,
+    email: String?,
+    api: com.example.data.remote.SoundSpireService,
+    onSaved: (ProfileResponse) -> Unit,
+    onCancel: () -> Unit,
 ) {
-    var rawTextComment by remember { mutableStateOf("") }
-    var focusedParentId: String? by remember { mutableStateOf(null) }
-    var focusedParentName: String? by remember { mutableStateOf(null) }
+    val context = LocalContext.current
+    var fullName by remember { mutableStateOf(profile?.full_name ?: "") }
+    var username by remember { mutableStateOf(profile?.username ?: "") }
+    var phone by remember { mutableStateOf(profile?.mobile_number ?: "") }
+    var dob by remember { mutableStateOf(profile?.date_of_birth?.take(10) ?: "") }
+    var gender by remember { mutableStateOf(profile?.gender ?: "Other") }
+    var city by remember { mutableStateOf(profile?.city ?: "") }
+    var country by remember { mutableStateOf(profile?.country ?: "") }
+    var saving by remember { mutableStateOf(false) }
 
-    val topLevelComments = comments.filter { it.parentId == null }
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = AccentOrange,
+        unfocusedBorderColor = TextMuted.copy(alpha = 0.3f),
+        focusedTextColor = TextWhite,
+        unfocusedTextColor = TextWhite,
+        focusedContainerColor = CardBackground,
+        unfocusedContainerColor = CardBackground,
+    )
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        // Nested replies hud indicator if active
-        if (focusedParentId != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(SoundSpireAccentPurple.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .padding(bottom = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Reply,
-                        contentDescription = null,
-                        tint = SoundSpireAccentPurple,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Replying to ${focusedParentName}",
-                        color = SoundSpireAccentPurple,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                IconButton(
-                    onClick = {
-                        focusedParentId = null
-                        focusedParentName = null
-                    },
-                    modifier = Modifier.size(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Cancel",
-                        tint = SoundSpireAccentPurple,
-                        modifier = Modifier.size(12.dp)
-                    )
-                }
-            }
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        EditField("Full Name *", fullName, { fullName = it }, fieldColors)
+        EditField("Username *", username, { username = it }, fieldColors)
 
-        // Input form
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 10.dp)
-        ) {
+        // DOB with date picker
+        Column(modifier = Modifier.fillMaxWidth()) {
+            TText("Date of Birth", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(4.dp))
             OutlinedTextField(
-                value = rawTextComment,
-                onValueChange = { rawTextComment = it },
-                placeholder = { Text(if (focusedParentId != null) "Replying to note..." else "Join discussions, ask for setups...", fontSize = 11.sp, color = TextSecondary) },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("comments_input_field"),
-                shape = RoundedCornerShape(8.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SoundSpireNeonTeal)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            IconButton(
-                onClick = {
-                    if (rawTextComment.isNotBlank()) {
-                        onSubmit(rawTextComment, focusedParentId)
-                        // Reset replies states
-                        rawTextComment = ""
-                        focusedParentId = null
-                        focusedParentName = null
+                value = dob,
+                onValueChange = {},
+                readOnly = true,
+                trailingIcon = {
+                    androidx.compose.material3.IconButton(onClick = {
+                        val cal = java.util.Calendar.getInstance()
+                        android.app.DatePickerDialog(context, { _, y, m, d ->
+                            dob = "%04d-%02d-%02d".format(y, m + 1, d)
+                        }, cal.get(java.util.Calendar.YEAR) - 18, cal.get(java.util.Calendar.MONTH), cal.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                    }) {
+                        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.Edit, null, tint = AccentOrange)
                     }
                 },
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(SoundSpireNeonTeal, RoundedCornerShape(8.dp))
-                    .testTag("submit_comment_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Submit",
-                    tint = MidnightBlack,
-                    modifier = Modifier.size(18.dp)
-                )
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                singleLine = true,
+                colors = fieldColors,
+            )
+            val dobTooYoung = dob.isNotBlank() && kotlin.runCatching {
+                val year = dob.split("-")[0].toInt()
+                java.util.Calendar.getInstance().get(java.util.Calendar.YEAR) - year < 13
+            }.getOrDefault(false)
+            if (dobTooYoung) TText("Must be at least 13 years old", color = ErrorRed, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+        }
+
+        EditField("Gender", gender, { gender = it }, fieldColors)
+
+        // Phone with digits-only validation
+        Column(modifier = Modifier.fillMaxWidth()) {
+            TText("Phone Number", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(4.dp))
+            OutlinedTextField(
+                value = phone,
+                onValueChange = { if (it.all { c -> c.isDigit() || c == '+' || c == '-' }) phone = it },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(8.dp),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                colors = fieldColors,
+            )
+            if (phone.isNotBlank() && !phone.matches(Regex("^[+]?[\\d-]+$"))) {
+                TText("Invalid phone number format", color = ErrorRed, fontSize = 11.sp, modifier = Modifier.padding(start = 4.dp, top = 2.dp))
             }
         }
 
-        Text(
-            text = "DISCUSSIONS & REPLIES",
-            color = SoundSpireVibrantBlue,
-            fontWeight = FontWeight.Bold,
-            fontSize = 11.sp,
-            modifier = Modifier.padding(top = 16.dp, bottom = 10.dp)
-        )
+        EditField("City", city, { city = it }, fieldColors)
+        EditField("Country", country, { country = it }, fieldColors)
 
-        if (topLevelComments.isEmpty()) {
-            Text(
-                "No live chats yet. Setup a discussion!",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(24.dp)
-            )
-        } else {
-            // Render comments, including its sub-replies right below
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (topComment in topLevelComments) {
-                    CommentCard(
-                        comment = topComment,
-                        onReplyClick = {
-                            focusedParentId = topComment.id
-                            focusedParentName = topComment.userName
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onCancel, shape = RoundedCornerShape(8.dp)) {
+                TText("Cancel", color = TextWhite)
+            }
+            Button(
+                onClick = {
+                    saving = true
+                    CoroutineScope(Dispatchers.Main).launch {
+                        try {
+                            api.updateProfile(ProfileUpdateRequest(
+                                email = email ?: "",
+                                full_name = fullName.ifBlank { "User" },
+                                username = username.ifBlank { email?.substringBefore("@") ?: "user" },
+                                gender = gender.ifBlank { null },
+                                date_of_birth = dob.ifBlank { null },
+                                mobile_number = phone.ifBlank { null },
+                                city = city.ifBlank { null },
+                                country = country.ifBlank { null },
+                            ))
+                            val updated = api.getProfile(email ?: "")
+                            onSaved(updated)
+                        } catch (_: Exception) {
+                            onCancel()
                         }
-                    )
-
-                    // Find replies associated with this parent
-                    val replies = comments.filter { it.parentId == topComment.id }
-                    if (replies.isNotEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .padding(start = 24.dp)
-                                .border(1.dp, SoundSpireAccentPurple.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                                .padding(vertical = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            for (reply in replies) {
-                                CommentCard(
-                                    comment = reply,
-                                    isReply = true,
-                                    onReplyClick = {}
-                                )
-                            }
-                        }
+                        saving = false
                     }
-                }
+                },
+                enabled = !saving,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                if (saving) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                else TText("Save Changes", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
 }
 
 @Composable
-private fun CommentCard(
-    comment: Comment,
-    isReply: Boolean = false,
-    onReplyClick: () -> Unit
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = if (isReply) Color.Transparent else CardBackground),
-        shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = comment.userName,
-                        color = if (comment.userRole == "artist") SoundSpireNeonTeal else SoundSpireVibrantBlue,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    if (comment.userRole == "artist") {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.FiberManualRecord,
-                            contentDescription = "Online",
-                            tint = SoundSpireNeonTeal,
-                            modifier = Modifier.size(6.dp)
-                        )
-                    }
-                }
+private fun EditField(label: String, value: String, onValueChange: (String) -> Unit, colors: androidx.compose.material3.TextFieldColors, keyboardType: KeyboardType = KeyboardType.Text) {
+    Column {
+        TText(label, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.height(4.dp))
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            colors = colors,
+        )
+    }
+}
 
-                if (!isReply) {
-                    IconButton(
-                        onClick = onReplyClick,
-                        modifier = Modifier.size(24.dp).testTag("reply_button_${comment.id}")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Reply,
-                            contentDescription = "Reply",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(14.dp)
-                        )
+@Composable
+private fun ProfileInfoGrid(profile: ProfileResponse?, email: String?) {
+    val fields = listOf(
+        "Email" to (profile?.email ?: email ?: "Not provided"),
+        "Phone" to (profile?.mobile_number ?: "Not provided"),
+        "DOB" to (profile?.date_of_birth?.take(10) ?: "Not provided"),
+        "Gender" to (profile?.gender ?: "Other"),
+        "City" to (profile?.city ?: "Not provided"),
+        "Country" to (profile?.country ?: "Not provided"),
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        fields.chunked(2).forEach { row ->
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { (label, value) ->
+                    Column(modifier = Modifier.weight(1f)) {
+                        TText(label, color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .background(CardBackground, RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            TText(value, color = TextWhite, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
+                if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = comment.commentText,
-                color = TextPrimary,
-                fontSize = 11.sp,
-                lineHeight = 14.sp
-            )
         }
     }
 }
