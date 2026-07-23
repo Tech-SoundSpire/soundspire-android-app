@@ -66,6 +66,17 @@ object Routes {
     const val ALBUM_DETAIL = "album_detail"
 }
 
+// Album reviews are keyed "album:{id}" and must open the album page; everything
+// else is a track review. Centralized so no click site can route an album to the
+// track screen (which fails metadata lookup and shows placeholders).
+fun androidx.navigation.NavController.openReview(reviewTrackId: String) {
+    if (reviewTrackId.startsWith("album:")) {
+        navigate("${Routes.ALBUM_DETAIL}/${reviewTrackId.removePrefix("album:")}")
+    } else {
+        navigate("${Routes.REVIEW_DETAIL}/$reviewTrackId")
+    }
+}
+
 val bottomNavRoutes = listOf(
     Routes.EXPLORE,
     Routes.FEED,
@@ -187,7 +198,7 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                             restoreState = true
                         }
                     },
-                    onReviewClick = { trackId -> navController.navigate("${Routes.REVIEW_DETAIL}/$trackId") },
+                    onReviewClick = { trackId -> navController.openReview(trackId) },
                     onArtistVoteClick = { uuid -> navController.navigate("${Routes.ARTIST_VOTE}/$uuid") },
                     onArtistCommunityClick = { slug -> navController.navigate("${Routes.COMMUNITY_DETAIL}/$slug/about") }
                 )
@@ -203,7 +214,7 @@ fun AppNavigation(authViewModel: AuthViewModel) {
             composable(Routes.REVIEWS) {
                 ReviewsScreen(
                     onSearchClick = { navController.navigate(Routes.SEARCH) },
-                    onReviewClick = { trackId -> navController.navigate("${Routes.REVIEW_DETAIL}/$trackId") }
+                    onReviewClick = { trackId -> navController.openReview(trackId) }
                 )
             }
             composable("${Routes.REVIEW_DETAIL}/{trackId}") { backStackEntry ->
@@ -320,11 +331,7 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                     slug = slug,
                     initialTab = tab,
                     onBack = { navController.popBackStack() },
-                    onReviewClick = { reviewTrackId ->
-                        // album reviews are keyed "album:{id}" → open album page, else song page.
-                        if (reviewTrackId.startsWith("album:")) navController.navigate("${Routes.ALBUM_DETAIL}/${reviewTrackId.removePrefix("album:")}")
-                        else navController.navigate("${Routes.REVIEW_DETAIL}/$reviewTrackId")
-                    }
+                    onReviewClick = { reviewTrackId -> navController.openReview(reviewTrackId) }
                 )
             }
             composable(Routes.ARTIST_DASHBOARD) {
