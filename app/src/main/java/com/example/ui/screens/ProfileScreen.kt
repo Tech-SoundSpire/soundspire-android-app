@@ -71,6 +71,10 @@ import com.example.util.defaultProfileImageUrl
 import com.example.util.resolveImageUrl
 import com.example.data.remote.ProfileUpdateRequest
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.util.S3Uploader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -335,6 +339,29 @@ private fun EditableProfileForm(
     var country by remember { mutableStateOf(profile?.country ?: "") }
     var saving by remember { mutableStateOf(false) }
 
+    // Profile picture: local preview (Uri) while picking + the uploaded s3:// path.
+    // Falls back to the existing picture if the user doesn't change it.
+    var pickedImageUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var uploadedImagePath by remember { mutableStateOf<String?>(null) }
+    var uploadingImage by remember { mutableStateOf(false) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) {
+            pickedImageUri = uri
+            uploadingImage = true
+            CoroutineScope(Dispatchers.Main).launch {
+                val fileName = "images/users/${profile?.user_id ?: username}-${System.nanoTime()}.jpg"
+                uploadedImagePath = S3Uploader.upload(context, uri, fileName)
+                uploadingImage = false
+                if (uploadedImagePath == null) {
+                    // Upload failed — drop the preview so the user isn't misled into
+                    // thinking a picture that never reached S3 was saved.
+                    pickedImageUri = null
+                    android.widget.Toast.makeText(context, "Image upload failed. Try again.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = AccentOrange,
         unfocusedBorderColor = TextMuted.copy(alpha = 0.3f),
@@ -345,6 +372,76 @@ private fun EditableProfileForm(
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Tappable avatar — pick a new profile picture.
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(contentAlignment = Alignment.Center) {
+                AsyncImage(
+                    model = pickedImageUri ?: resolveImageUrl(profile?.profile_picture_url) ?: defaultProfileImageUrl(),
+                    contentDescription = "Profile picture",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(96.dp)
+                        .clip(CircleShape)
+                        .background(Color.DarkGray)
+                        .clickable(enabled = !uploadingImage) {
+                            imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                )
+                if (uploadingImage) {
+                    CircularProgressIndicator(color = AccentOrange, modifier = Modifier.size(28.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            TText(
+                if (uploadingImage) "Uploading…" else "Tap to change photo",
+                color = AccentOrange, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+            )
+        }
+
+        // Save/Cancel kept at the top of the form so they're visible on entering edit
+        // mode — previously they sat below all fields, off-screen, and users didn't
+        // realize they had to scroll down to save.
+        val onSave = {
+            saving = true
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    api.updateProfile(ProfileUpdateRequest(
+                        email = email ?: "",
+                        full_name = fullName.ifBlank { "User" },
+                        username = username.ifBlank { email?.substringBefore("@") ?: "user" },
+                        gender = gender.ifBlank { null },
+                        date_of_birth = dob.ifBlank { null },
+                        mobile_number = phone.ifBlank { null },
+                        city = city.ifBlank { null },
+                        country = country.ifBlank { null },
+                        // Only send a new picture if one was uploaded; else leave unchanged.
+                        profile_picture_url = uploadedImagePath,
+                    ))
+                    val updated = api.getProfile(email ?: "")
+                    onSaved(updated)
+                } catch (_: Exception) {
+                    onCancel()
+                }
+                saving = false
+            }
+            Unit
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = onCancel, shape = RoundedCornerShape(8.dp)) {
+                TText("Cancel", color = TextWhite)
+            }
+            Button(
+                onClick = onSave,
+                enabled = !saving && !uploadingImage,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
+                shape = RoundedCornerShape(8.dp),
+            ) {
+                if (saving) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                else TText("Save Changes", color = Color.White, fontWeight = FontWeight.Bold)
+            }
+        }
+
         EditField("Full Name *", fullName, { fullName = it }, fieldColors)
         EditField("Username *", username, { username = it }, fieldColors)
 
@@ -400,43 +497,6 @@ private fun EditableProfileForm(
 
         EditField("City", city, { city = it }, fieldColors)
         EditField("Country", country, { country = it }, fieldColors)
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(onClick = onCancel, shape = RoundedCornerShape(8.dp)) {
-                TText("Cancel", color = TextWhite)
-            }
-            Button(
-                onClick = {
-                    saving = true
-                    CoroutineScope(Dispatchers.Main).launch {
-                        try {
-                            api.updateProfile(ProfileUpdateRequest(
-                                email = email ?: "",
-                                full_name = fullName.ifBlank { "User" },
-                                username = username.ifBlank { email?.substringBefore("@") ?: "user" },
-                                gender = gender.ifBlank { null },
-                                date_of_birth = dob.ifBlank { null },
-                                mobile_number = phone.ifBlank { null },
-                                city = city.ifBlank { null },
-                                country = country.ifBlank { null },
-                            ))
-                            val updated = api.getProfile(email ?: "")
-                            onSaved(updated)
-                        } catch (_: Exception) {
-                            onCancel()
-                        }
-                        saving = false
-                    }
-                },
-                enabled = !saving,
-                colors = ButtonDefaults.buttonColors(containerColor = AccentOrange),
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                if (saving) CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                else TText("Save Changes", color = Color.White, fontWeight = FontWeight.Bold)
-            }
-        }
     }
 }
 
