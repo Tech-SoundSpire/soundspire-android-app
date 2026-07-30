@@ -456,6 +456,15 @@ data class ForumMessage(
 )
 data class ForumMessagesResponse(val messages: List<ForumMessage> = emptyList(), val hasMore: Boolean = false)
 
+// Body for authed message create; user_id is derived from the JWT server-side.
+data class PostMessageRequest(
+    val content: String,
+    val media_type: String = "text",
+    val media_urls: List<String> = emptyList(),
+    val parent_post_id: String? = null,
+)
+data class EditMessageRequest(val content: String)
+
 data class FanArtPost(
     val forum_post_id: String,
     val user_id: String? = null,
@@ -765,6 +774,16 @@ interface SoundSpireService {
 
     @POST("api/forums/{forumId}/messages/{postId}/react")
     suspend fun reactToMessage(@Path("forumId") forumId: String, @Path("postId") postId: String, @Body body: Map<String, String>): ReactionResponse
+
+    // Authed message writes (anon key no longer has write access to forum_posts).
+    @POST("api/forums/{forumId}/messages")
+    suspend fun postForumMessage(@Path("forumId") forumId: String, @Body body: PostMessageRequest): Any
+
+    @PATCH("api/forums/{forumId}/messages/{postId}")
+    suspend fun editForumMessage(@Path("forumId") forumId: String, @Path("postId") postId: String, @Body body: EditMessageRequest): Any
+
+    @DELETE("api/forums/{forumId}/messages/{postId}")
+    suspend fun deleteForumMessage(@Path("forumId") forumId: String, @Path("postId") postId: String): Any
 
     @GET("api/forums/{forumId}/fan-art")
     suspend fun getFanArt(@Path("forumId") forumId: String, @Query("limit") limit: Int = 20, @Query("offset") offset: Int = 0): FanArtResponse

@@ -37,16 +37,6 @@ object SupabaseManager {
         }
     }
 
-    @Serializable
-    data class ForumPostInsert(
-        val forum_id: String,
-        val user_id: String,
-        val content: String,
-        val media_type: String,
-        val media_urls: List<String> = emptyList(),
-        val parent_post_id: String? = null,
-    )
-
     /**
      * A forum_posts row as stored in Supabase. The backend `/messages` endpoint strips
      * `parent_post_id` and `reactions` (its Sequelize model doesn't declare them), so we
@@ -74,24 +64,9 @@ object SupabaseManager {
         }.decodeList()
     }
 
-    /** Insert a forum_post row (chat message / comment). */
-    suspend fun insertMessage(row: ForumPostInsert) {
-        client.from("forum_posts").insert(row)
-    }
-
-    /** Delete a message by id. */
-    suspend fun deleteMessage(forumPostId: String) {
-        client.from("forum_posts").delete {
-            filter { eq("forum_post_id", forumPostId) }
-        }
-    }
-
-    /** Edit a message's content. */
-    suspend fun updateMessageContent(forumPostId: String, content: String) {
-        client.from("forum_posts").update(buildJsonObject { put("content", content) }) {
-            filter { eq("forum_post_id", forumPostId) }
-        }
-    }
+    // Message writes moved to the authed API (postForumMessage / editForumMessage /
+    // deleteForumMessage in SoundSpireApi). The anon key no longer has write access to
+    // forum_posts after the security lockdown; only SELECT + realtime remain here.
 
     /**
      * Subscribe to realtime INSERT/UPDATE/DELETE on forum_posts for a forum.

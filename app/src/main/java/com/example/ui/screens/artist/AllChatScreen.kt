@@ -56,6 +56,8 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.remote.ApiClient
 import com.example.data.remote.ForumMessage
+import com.example.data.remote.PostMessageRequest
+import com.example.data.remote.EditMessageRequest
 import com.example.data.remote.SupabaseManager
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
@@ -257,7 +259,7 @@ fun AllChatScreen(
                             Text("Save", color = Color(0xFF22C55E), fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable {
                                 val newText = editText
                                 editingId = null
-                                CoroutineScope(Dispatchers.IO).launch { try { SupabaseManager.updateMessageContent(msg.forum_post_id, newText) } catch (_: Exception) {} }
+                                CoroutineScope(Dispatchers.IO).launch { try { api.editForumMessage(forumId, msg.forum_post_id, EditMessageRequest(newText)) } catch (_: Exception) {} }
                                 messages = messages.map { if (it.forum_post_id == msg.forum_post_id) it.copy(content = newText) else it }
                             })
                             Text("Cancel", color = TextMuted, fontSize = 12.sp, modifier = Modifier.clickable { editingId = null })
@@ -312,7 +314,7 @@ fun AllChatScreen(
                         Text("Delete", color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.clickable {
                             selectedMsgId = null
                             messages = messages.filter { it.forum_post_id != msg.forum_post_id }
-                            CoroutineScope(Dispatchers.IO).launch { try { SupabaseManager.deleteMessage(msg.forum_post_id) } catch (_: Exception) {} }
+                            CoroutineScope(Dispatchers.IO).launch { try { api.deleteForumMessage(forumId, msg.forum_post_id) } catch (_: Exception) {} }
                         })
                     }
                 }
@@ -463,9 +465,7 @@ fun AllChatScreen(
                             if (img != null) {
                                 S3Uploader.upload(context, img, "chat/${System.nanoTime()}.jpg")?.let { mediaUrls.add(it) }
                             }
-                            SupabaseManager.insertMessage(SupabaseManager.ForumPostInsert(
-                                forum_id = forumId,
-                                user_id = currentUserId,
+                            api.postForumMessage(forumId, PostMessageRequest(
                                 content = text,
                                 media_type = if (mediaUrls.isNotEmpty()) "image" else "text",
                                 media_urls = mediaUrls,

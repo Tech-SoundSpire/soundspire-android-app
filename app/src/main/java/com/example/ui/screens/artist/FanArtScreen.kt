@@ -60,6 +60,7 @@ import com.example.data.remote.ApiClient
 import com.example.data.remote.FanArtComment
 import com.example.data.remote.FanArtCreateRequest
 import com.example.data.remote.FanArtPost
+import com.example.data.remote.PostMessageRequest
 import com.example.data.remote.SupabaseManager
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
@@ -149,9 +150,7 @@ fun FanArtScreen(forumId: String, currentUserId: String? = null) {
         if (currentUserId == null || content.isBlank()) return
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                SupabaseManager.insertMessage(SupabaseManager.ForumPostInsert(
-                    forum_id = forumId,
-                    user_id = currentUserId,
+                api.postForumMessage(forumId, PostMessageRequest(
                     content = content,
                     media_type = "text",
                     parent_post_id = parentPostId,
