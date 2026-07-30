@@ -21,10 +21,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -75,6 +79,8 @@ fun SignupScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var localError by remember { mutableStateOf<String?>(null) }
     var signupMessage by remember { mutableStateOf<String?>(null) }
+    var acceptTerms by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
 
     val isLoading by authViewModel.authActionLoading.collectAsState()
     val serverError by authViewModel.authError.collectAsState()
@@ -156,18 +162,47 @@ fun SignupScreen(
                     TText(signupMessage!!, color = SuccessGreen, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Terms acceptance (required before signup) - matches the website flow.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = acceptTerms,
+                        onCheckedChange = { acceptTerms = it; localError = null },
+                        // uncheckedColor gives the box a dark outline on the white card
+                        // (default unchecked border is near-white and was invisible).
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = AccentOrange,
+                            uncheckedColor = AuthTextDark,
+                            checkmarkColor = Color.White,
+                        ),
+                        modifier = Modifier.testTag("signup_accept_terms"),
+                    )
+                    TText("I accept the ", color = AuthTextDark, fontSize = 13.sp)
+                    TText(
+                        "Terms & Conditions",
+                        color = AccentOrange,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { showTermsDialog = true },
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = {
-                        localError = validateSignup(username, email, password, confirmPassword, passwordChecks)
+                        localError = validateSignup(username, email, password, confirmPassword, passwordChecks, acceptTerms)
                         if (localError == null) {
                             authViewModel.signup(username, email, password) {
                                 signupMessage = "Verification email sent! Check your inbox and verify before logging in."
                             }
                         }
                     },
-                    enabled = !isLoading,
+                    enabled = !isLoading && acceptTerms,
                     modifier = Modifier.fillMaxWidth().height(50.dp).testTag("signup_submit"),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentOrange, disabledContainerColor = AccentOrange.copy(alpha = 0.5f))
@@ -190,8 +225,45 @@ fun SignupScreen(
                 )
             }
         }
+
+        if (showTermsDialog) {
+            AlertDialog(
+                onDismissRequest = { showTermsDialog = false },
+                confirmButton = {
+                    TextButton(onClick = { acceptTerms = true; showTermsDialog = false }) {
+                        TText("Accept", color = AccentOrange, fontWeight = FontWeight.SemiBold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showTermsDialog = false }) {
+                        TText("Close", color = AuthTextMuted)
+                    }
+                },
+                title = { TText("Terms & Conditions", color = AccentOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        TText(TERMS_AND_CONDITIONS_TEXT, color = Color.White, fontSize = 13.sp)
+                    }
+                },
+            )
+        }
     }
 }
+
+// ponytail: same copy as the website Terms & Conditions modal. Placeholder wording;
+// real Terms / Privacy / Community Guidelines content comes later.
+private const val TERMS_AND_CONDITIONS_TEXT =
+    "Welcome to SoundSpire. By using our services, you agree to comply with all applicable laws " +
+    "and respect the intellectual property rights of other creators.\n\n" +
+    "By creating an account, you agree that all provided information is accurate and up to date. " +
+    "You authorize our platform to manage and display your profile.\n\n" +
+    "You agree not to upload or distribute any content that infringes on intellectual property " +
+    "rights or promotes illegal activity.\n\n" +
+    "You grant us a worldwide, non-exclusive license to promote and distribute your submitted works.\n\n" +
+    "Any disputes will be resolved under your country's jurisdiction."
 
 @Composable
 private fun SignupField(
@@ -230,12 +302,13 @@ private fun getPasswordChecks(password: String): List<Pair<String, Boolean>> {
     )
 }
 
-private fun validateSignup(username: String, email: String, password: String, confirmPassword: String, checks: List<Pair<String, Boolean>>): String? {
+private fun validateSignup(username: String, email: String, password: String, confirmPassword: String, checks: List<Pair<String, Boolean>>, acceptTerms: Boolean): String? {
     if (username.isBlank() || email.isBlank() || password.isBlank()) return "All fields are required"
     if (username.length < 3) return "Username must be at least 3 characters"
     if (!email.contains("@") || !email.contains(".")) return "Invalid email format"
     if (checks.any { !it.second }) return "Password does not meet all requirements"
     if (password != confirmPassword) return "Passwords do not match"
     if (!"[a-zA-Z0-9_-]+".toRegex().matches(username)) return "Username can only contain letters, numbers, underscores, or hyphens"
+    if (!acceptTerms) return "Please accept the Terms & Conditions"
     return null
 }
