@@ -101,6 +101,11 @@ fun AlbumDetailScreen(
     var userRating by remember { mutableStateOf(0) }
     var reviewText by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
+    var currentUserId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try { currentUserId = api.getSession().user?.id } catch (_: Exception) {}
+    }
 
     LaunchedEffect(albumId) {
         try {
@@ -236,7 +241,7 @@ fun AlbumDetailScreen(
         if (reviews.isNotEmpty()) {
             item { TText("Reviews (${reviews.size})", color = HeadingPeach, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
             items(reviews.size) { idx ->
-                SongReviewCard(reviews[idx], api)
+                SongReviewCard(reviews[idx], api, currentUserId)
                 Spacer(modifier = Modifier.height(8.dp))
             }
         } else {

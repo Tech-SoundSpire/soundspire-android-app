@@ -55,6 +55,7 @@ data class SessionUser(
     val role: String? = null,
     val isAlsoArtist: Boolean = false,
     val artistId: String? = null,
+    val isAdmin: Boolean = false,
 )
 
 data class ProfileResponse(
@@ -441,6 +442,49 @@ data class CommunityForum(val forum_id: String, val community_id: String? = null
 data class CommunityForumsResponse(val forums: List<CommunityForum> = emptyList())
 
 data class ForumUser(val user_id: String? = null, val username: String? = null, val full_name: String? = null, val profile_picture_url: String? = null)
+
+// Moderation request/response bodies.
+data class ReportRequest(val target_type: String, val target_id: String, val reason: String, val details: String? = null)
+data class BlockRequest(val blocked_user_id: String)
+data class BlockedUser(val user_id: String? = null, val username: String? = null, val full_name: String? = null, val profile_picture_url: String? = null)
+data class BlockRow(val block_id: String, val blocked_user_id: String, val blockedUser: BlockedUser? = null)
+data class BlocksResponse(val blocks: List<BlockRow> = emptyList())
+
+// Admin moderation DTOs.
+data class AdminReporter(val user_id: String? = null, val username: String? = null, val full_name: String? = null)
+data class AdminReport(
+    val report_id: String,
+    val reporter_user_id: String? = null,
+    val target_type: String,
+    val target_id: String,
+    val reason: String,
+    val details: String? = null,
+    val status: String,
+    val created_at: String? = null,
+    val reporter: AdminReporter? = null,
+)
+data class AdminReportsResponse(val reports: List<AdminReport> = emptyList())
+data class HideContentRequest(val target_type: String, val target_id: String, val hidden_reason: String? = null)
+data class BanUserRequest(val user_id: String)
+data class AdminUserRow(
+    val user_id: String,
+    val username: String? = null,
+    val email: String? = null,
+    val full_name: String? = null,
+    val is_banned: Boolean = false,
+    val is_admin: Boolean = false,
+)
+data class AdminUsersResponse(val users: List<AdminUserRow> = emptyList())
+data class AdminActionRow(
+    val action_id: String,
+    val action: String,
+    val target_type: String,
+    val target_id: String,
+    val note: String? = null,
+    val created_at: String? = null,
+    val moderator_username: String? = null,
+)
+data class AdminActionsResponse(val actions: List<AdminActionRow> = emptyList())
 data class ForumMessage(
     val forum_post_id: String,
     val forum_id: String? = null,
@@ -784,6 +828,41 @@ interface SoundSpireService {
 
     @DELETE("api/forums/{forumId}/messages/{postId}")
     suspend fun deleteForumMessage(@Path("forumId") forumId: String, @Path("postId") postId: String): Any
+
+    // Moderation: report content/users, block/unblock users.
+    @POST("api/reports")
+    suspend fun submitReport(@Body body: ReportRequest): Any
+
+    @POST("api/blocks")
+    suspend fun blockUser(@Body body: BlockRequest): Any
+
+    @DELETE("api/blocks/{blockedUserId}")
+    suspend fun unblockUser(@Path("blockedUserId") blockedUserId: String): Any
+
+    @GET("api/blocks")
+    suspend fun getBlocks(): BlocksResponse
+
+    // Admin moderation (server enforces is_admin; 403 otherwise).
+    @GET("api/admin/reports")
+    suspend fun adminReports(@Query("status") status: String? = null, @Query("target_type") targetType: String? = null): AdminReportsResponse
+
+    @POST("api/admin/hide-content")
+    suspend fun adminHideContent(@Body body: HideContentRequest): Any
+
+    @POST("api/admin/ban-user")
+    suspend fun adminBanUser(@Body body: BanUserRequest): Any
+
+    @POST("api/admin/unban-user")
+    suspend fun adminUnbanUser(@Body body: BanUserRequest): Any
+
+    @POST("api/admin/reports/{reportId}/dismiss")
+    suspend fun adminDismissReport(@Path("reportId") reportId: String): Any
+
+    @GET("api/admin/users")
+    suspend fun adminSearchUsers(@Query("q") q: String = ""): AdminUsersResponse
+
+    @GET("api/admin/actions")
+    suspend fun adminActions(): AdminActionsResponse
 
     @GET("api/forums/{forumId}/fan-art")
     suspend fun getFanArt(@Path("forumId") forumId: String, @Query("limit") limit: Int = 20, @Query("offset") offset: Int = 0): FanArtResponse

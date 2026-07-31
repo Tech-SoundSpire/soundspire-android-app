@@ -32,6 +32,7 @@ import com.example.ui.screens.ArtistCatalogScreen
 import com.example.ui.screens.ReviewsScreen
 import com.example.ui.screens.SearchScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.ModerationScreen
 import com.example.ui.screens.SignupScreen
 import com.example.ui.screens.artist.ArtistDetailsScreen
 import com.example.ui.screens.artist.ArtistLoginScreen
@@ -62,6 +63,7 @@ object Routes {
     const val ARTIST_DETAILS = "artist_details"
     const val COMMUNITY_DETAIL = "community_detail"
     const val SETTINGS = "settings"
+    const val MODERATION = "moderation"
     const val ARTIST_CATALOG = "artist_catalog"
     const val ALBUM_DETAIL = "album_detail"
 }
@@ -279,7 +281,13 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                 )
             }
             composable(Routes.SETTINGS) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onModeration = { navController.navigate(Routes.MODERATION) },
+                )
+            }
+            composable(Routes.MODERATION) {
+                ModerationScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.SEARCH) {
                 SearchScreen(

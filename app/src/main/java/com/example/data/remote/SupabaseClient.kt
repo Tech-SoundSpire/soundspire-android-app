@@ -53,12 +53,20 @@ object SupabaseManager {
         val parent_post_id: String? = null,
         val created_at: String? = null,
         val reactions: Map<String, List<String>>? = null,
+        val is_hidden: Boolean? = null,
     )
 
-    /** Read all messages for a forum directly from Supabase (includes parent_post_id + reactions). */
+    /**
+     * Read all messages for a forum directly from Supabase (includes parent_post_id +
+     * reactions). Excludes moderator-hidden posts (is_hidden). Blocked-author filtering
+     * is applied by the caller, which knows the viewer's block list.
+     */
     suspend fun fetchMessages(forumId: String, limit: Long = 200): List<ForumPostRow> {
         return client.from("forum_posts").select {
-            filter { eq("forum_id", forumId) }
+            filter {
+                eq("forum_id", forumId)
+                eq("is_hidden", false)
+            }
             order("created_at", io.github.jan.supabase.postgrest.query.Order.ASCENDING)
             limit(limit)
         }.decodeList()

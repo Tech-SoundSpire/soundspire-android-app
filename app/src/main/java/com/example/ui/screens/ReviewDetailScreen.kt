@@ -98,6 +98,11 @@ fun ReviewDetailScreen(
     var reviewText by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     var infoTab by remember { mutableStateOf("credits") } // "credits" | "details"
+    var currentUserId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        try { currentUserId = api.getSession().user?.id } catch (_: Exception) {}
+    }
 
     LaunchedEffect(trackId) {
         try { trackMeta = api.getTrackMetadata(trackId) } catch (_: Exception) { }
@@ -373,7 +378,7 @@ fun ReviewDetailScreen(
             if (reviews.isNotEmpty()) {
                 item { TText("All Reviews (${reviews.size})", color = HeadingPeach, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) }
                 items(reviews) { review ->
-                    SongReviewCard(review, api)
+                    SongReviewCard(review, api, currentUserId)
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             } else {

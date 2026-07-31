@@ -61,7 +61,10 @@ import com.example.data.remote.FanArtComment
 import com.example.data.remote.FanArtCreateRequest
 import com.example.data.remote.FanArtPost
 import com.example.data.remote.PostMessageRequest
+import com.example.data.remote.ReportRequest
+import com.example.data.remote.BlockRequest
 import com.example.data.remote.SupabaseManager
+import com.example.ui.components.ReportDialog
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
 import com.example.util.S3Uploader
@@ -86,6 +89,7 @@ fun FanArtScreen(forumId: String, currentUserId: String? = null) {
     // which post has its comment section expanded, and which post's emoji picker is open
     var openCommentsFor by remember { mutableStateOf<String?>(null) }
     var reactPickerFor by remember { mutableStateOf<String?>(null) }
+    var reportingPostId by remember { mutableStateOf<String?>(null) }
     // Upload modal state
     var showUploadModal by remember { mutableStateOf(false) }
     var selectedImages by remember { mutableStateOf<List<Uri>>(emptyList()) }
@@ -97,8 +101,11 @@ fun FanArtScreen(forumId: String, currentUserId: String? = null) {
     fun reload() {
         CoroutineScope(Dispatchers.Main).launch {
             try {
-                val backendPosts = api.getFanArt(forumId).posts
-                val rows = try { SupabaseManager.fetchMessages(forumId) } catch (_: Exception) { emptyList() }
+                val backendPosts = api.getFanArt(forumId).posts // already filters is_hidden + blocked (authed route)
+                val rawRows = try { SupabaseManager.fetchMessages(forumId) } catch (_: Exception) { emptyList() } // excludes is_hidden
+                // Drop comments/replies from users the viewer has blocked.
+                val blockedIds = try { api.getBlocks().blocks.map { it.blocked_user_id }.toSet() } catch (_: Exception) { emptySet() }
+                val rows = rawRows.filter { it.user_id == null || it.user_id !in blockedIds }
                 val byId = rows.associateBy { it.forum_post_id }
                 // comments/replies = rows whose parent chain points at a fan-art post
                 val childrenByParent = rows.filter { it.parent_post_id != null }.groupBy { it.parent_post_id }
@@ -208,6 +215,16 @@ fun FanArtScreen(forumId: String, currentUserId: String? = null) {
                             AsyncImage(model = resolveImageUrl(post.user?.profile_picture_url), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.DarkGray))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(post.user?.username ?: "user", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            val authorId = post.user_id
+                            if (authorId != null && authorId != currentUserId) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Text("Report", color = TextMuted, fontSize = 12.sp, modifier = Modifier.clickable { reportingPostId = post.forum_post_id })
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Block", color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.clickable {
+                                    posts = posts.filter { it.user_id != authorId }
+                                    CoroutineScope(Dispatchers.IO).launch { try { api.blockUser(BlockRequest(authorId)) } catch (_: Exception) {} }
+                                })
+                            }
                         }
                         if (!post.media_urls.isNullOrEmpty()) {
                             AsyncImage(model = resolveImageUrl(post.media_urls!!.first()), contentDescription = post.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().aspectRatio(1f))
@@ -302,6 +319,18 @@ fun FanArtScreen(forumId: String, currentUserId: String? = null) {
             onRemoveImage = { uri -> selectedImages = selectedImages.filter { it != uri } },
             onDismiss = { if (!uploading) { showUploadModal = false; selectedImages = emptyList(); uploadTitle = ""; uploadDescription = "" } },
             onUpload = { submitUpload() },
+        )
+    }
+
+    reportingPostId?.let { pid ->
+        ReportDialog(
+            onDismiss = { reportingPostId = null },
+            onSubmit = { reason, details ->
+                reportingPostId = null
+                CoroutineScope(Dispatchers.IO).launch {
+                    try { api.submitReport(ReportRequest("fan_art", pid, reason, details.ifBlank { null })) } catch (_: Exception) {}
+                }
+            },
         )
     }
 }

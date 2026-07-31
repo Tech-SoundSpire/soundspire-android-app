@@ -60,9 +60,11 @@ import kotlinx.coroutines.withContext
  * user_liked, so likes start unfilled and toggle optimistically (matches the website).
  */
 @Composable
-fun SongReviewCard(review: SongReview, api: SoundSpireService) {
+fun SongReviewCard(review: SongReview, api: SoundSpireService, currentUserId: String? = null) {
     val profilePic = resolveImageUrl(review.user?.profile_picture_url) ?: defaultProfileImageUrl()
     var liked by remember(review.review_id) { mutableStateOf(false) }
+    var showReport by remember(review.review_id) { mutableStateOf(false) }
+    var blocked by remember(review.review_id) { mutableStateOf(false) }
     var likeCount by remember(review.review_id) { mutableStateOf(review.like_count) }
     var showComments by remember(review.review_id) { mutableStateOf(false) }
     var comments by remember(review.review_id) { mutableStateOf<List<ReviewComment>>(emptyList()) }
@@ -76,6 +78,20 @@ fun SongReviewCard(review: SongReview, api: SoundSpireService) {
                 withContext(Dispatchers.Main) { comments = c }
             } catch (_: Exception) {}
         }
+    }
+
+    if (blocked) return  // optimistically hide after blocking the author
+
+    if (showReport) {
+        ReportDialog(
+            onDismiss = { showReport = false },
+            onSubmit = { reason, details ->
+                showReport = false
+                CoroutineScope(Dispatchers.IO).launch {
+                    try { api.submitReport(com.example.data.remote.ReportRequest("review", review.review_id, reason, details.ifBlank { null })) } catch (_: Exception) {}
+                }
+            },
+        )
     }
 
     Card(colors = CardDefaults.cardColors(containerColor = CardBackground), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
@@ -114,6 +130,16 @@ fun SongReviewCard(review: SongReview, api: SoundSpireService) {
                     Icon(Icons.Outlined.ChatBubbleOutline, null, tint = TextMuted, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(5.dp))
                     androidx.compose.material3.Text("$commentCount", color = TextMuted, fontSize = 12.sp)
+                }
+                val authorId = review.user?.user_id
+                if (authorId != null && authorId != currentUserId) {
+                    Spacer(modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Text("Report", color = TextMuted, fontSize = 12.sp, modifier = Modifier.clickable { showReport = true })
+                    Spacer(modifier = Modifier.width(12.dp))
+                    androidx.compose.material3.Text("Block", color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.clickable {
+                        blocked = true
+                        CoroutineScope(Dispatchers.IO).launch { try { api.blockUser(com.example.data.remote.BlockRequest(authorId)) } catch (_: Exception) {} }
+                    })
                 }
             }
 

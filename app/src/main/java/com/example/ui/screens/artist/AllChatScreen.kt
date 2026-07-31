@@ -58,6 +58,9 @@ import com.example.data.remote.ApiClient
 import com.example.data.remote.ForumMessage
 import com.example.data.remote.PostMessageRequest
 import com.example.data.remote.EditMessageRequest
+import com.example.data.remote.ReportRequest
+import com.example.data.remote.BlockRequest
+import com.example.ui.components.ReportDialog
 import com.example.data.remote.SupabaseManager
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextWhite
@@ -108,6 +111,7 @@ fun AllChatScreen(
     var selectedMsgId by remember { mutableStateOf<String?>(null) }
     var replyingTo by remember { mutableStateOf<ForumMessage?>(null) }
     var editingId by remember { mutableStateOf<String?>(null) }
+    var reportingMsg by remember { mutableStateOf<ForumMessage?>(null) }
     var expandedThreads by remember { mutableStateOf<Set<String>>(emptySet()) }
     val listState = rememberLazyListState()
     val reactionEmojis = listOf("👍", "❤️", "😂", "🔥", "🎵")
@@ -132,13 +136,16 @@ fun AllChatScreen(
     // reactions on every remount — reading from Supabase preserves both.
     LaunchedEffect(forumId) {
         try {
-            val rows = SupabaseManager.fetchMessages(forumId)
+            val rows = SupabaseManager.fetchMessages(forumId) // excludes is_hidden
+            // Filter out messages from users the viewer has blocked.
+            val blockedIds = try { api.getBlocks().blocks.map { it.blocked_user_id }.toSet() } catch (_: Exception) { emptySet() }
+            val visible = rows.filter { it.user_id == null || it.user_id !in blockedIds }
             // Enrich each row with its author (deduped — backend getUserById bypasses RLS)
-            val userIds = rows.mapNotNull { it.user_id }.distinct()
+            val userIds = visible.mapNotNull { it.user_id }.distinct()
             val userMap = userIds.associateWith { uid ->
                 try { api.getUserById(uid).user } catch (_: Exception) { null }
             }
-            messages = rows.map { r ->
+            messages = visible.map { r ->
                 ForumMessage(
                     forum_post_id = r.forum_post_id,
                     forum_id = r.forum_id,
@@ -316,6 +323,16 @@ fun AllChatScreen(
                             messages = messages.filter { it.forum_post_id != msg.forum_post_id }
                             CoroutineScope(Dispatchers.IO).launch { try { api.deleteForumMessage(forumId, msg.forum_post_id) } catch (_: Exception) {} }
                         })
+                    } else {
+                        Text("Report", color = TextMuted, fontSize = 12.sp, modifier = Modifier.clickable { reportingMsg = msg; selectedMsgId = null })
+                        val authorId = msg.user_id
+                        if (authorId != null) {
+                            Text("Block", color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.clickable {
+                                selectedMsgId = null
+                                messages = messages.filter { it.user_id != authorId }
+                                CoroutineScope(Dispatchers.IO).launch { try { api.blockUser(BlockRequest(authorId)) } catch (_: Exception) {} }
+                            })
+                        }
                     }
                 }
             }
@@ -480,5 +497,18 @@ fun AllChatScreen(
                 else Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = ArtistOrange)
             }
         }
+    }
+
+    reportingMsg?.let { msg ->
+        ReportDialog(
+            onDismiss = { reportingMsg = null },
+            onSubmit = { reason, details ->
+                val id = msg.forum_post_id
+                reportingMsg = null
+                CoroutineScope(Dispatchers.IO).launch {
+                    try { api.submitReport(ReportRequest("chat_message", id, reason, details.ifBlank { null })) } catch (_: Exception) {}
+                }
+            },
+        )
     }
 }
