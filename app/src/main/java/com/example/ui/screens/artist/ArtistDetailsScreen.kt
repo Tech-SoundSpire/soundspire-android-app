@@ -109,7 +109,6 @@ fun ArtistDetailsScreen(
     var communityName by remember { mutableStateOf("") }
     var communityDescription by remember { mutableStateOf("") }
     var acceptTerms by remember { mutableStateOf(false) }
-    var showTermsDialog by remember { mutableStateOf(false) }
     var cityExpanded by remember { mutableStateOf(false) }
     var remoteCities by remember { mutableStateOf<List<com.example.data.remote.CityResult>>(emptyList()) }
     var cityQuery by remember { mutableStateOf("") }
@@ -362,7 +361,9 @@ fun ArtistDetailsScreen(
                     color = ArtistOrange,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clickable { showTermsDialog = true },
+                    modifier = Modifier.clickable {
+                        try { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://soundspire.online/artist-terms"))) } catch (_: Exception) {}
+                    },
                 )
             }
 
@@ -446,43 +447,7 @@ fun ArtistDetailsScreen(
         }
     }
 
-    if (showTermsDialog) {
-        AlertDialog(
-            onDismissRequest = { showTermsDialog = false },
-            confirmButton = {
-                TextButton(onClick = { acceptTerms = true; showTermsDialog = false }) {
-                    TText("Accept", color = ArtistOrange, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTermsDialog = false }) {
-                    TText("Close", color = TextMuted)
-                }
-            },
-            title = { TText("Terms & Conditions", color = ArtistOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-            text = {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    TText(ARTIST_TERMS_TEXT, fontSize = 13.sp)
-                }
-            },
-        )
-    }
 }
-
-// ponytail: placeholder artist Terms & Conditions copy, mirrors the website artist modal.
-private const val ARTIST_TERMS_TEXT =
-    "Welcome to our artist distribution platform. By using our services, you agree to comply with " +
-    "all applicable laws and respect the intellectual property rights of other creators.\n\n" +
-    "By creating an account, you agree that all provided information is accurate and up to date. " +
-    "You authorize our platform to manage and display your profile.\n\n" +
-    "You agree not to upload or distribute any content that infringes on intellectual property " +
-    "rights or promotes illegal activity.\n\n" +
-    "You grant us a worldwide, non-exclusive license to promote and distribute your submitted works.\n\n" +
-    "Payments and royalties are subject to verification and compliance with financial regulations.\n\n" +
-    "Any disputes will be resolved under your country's jurisdiction."
 
 @Composable
 private fun VerificationDialog(onContinue: () -> Unit) {

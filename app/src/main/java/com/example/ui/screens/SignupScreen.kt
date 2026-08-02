@@ -80,7 +80,7 @@ fun SignupScreen(
     var localError by remember { mutableStateOf<String?>(null) }
     var signupMessage by remember { mutableStateOf<String?>(null) }
     var acceptTerms by remember { mutableStateOf(false) }
-    var showTermsDialog by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     val isLoading by authViewModel.authActionLoading.collectAsState()
     val serverError by authViewModel.authError.collectAsState()
@@ -187,7 +187,7 @@ fun SignupScreen(
                         color = AccentOrange,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { showTermsDialog = true },
+                        modifier = Modifier.clickable { openUrl(context, TERMS_URL) },
                     )
                 }
 
@@ -225,45 +225,17 @@ fun SignupScreen(
                 )
             }
         }
-
-        if (showTermsDialog) {
-            AlertDialog(
-                onDismissRequest = { showTermsDialog = false },
-                confirmButton = {
-                    TextButton(onClick = { acceptTerms = true; showTermsDialog = false }) {
-                        TText("Accept", color = AccentOrange, fontWeight = FontWeight.SemiBold)
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showTermsDialog = false }) {
-                        TText("Close", color = AuthTextMuted)
-                    }
-                },
-                title = { TText("Terms & Conditions", color = AccentOrange, fontSize = 18.sp, fontWeight = FontWeight.Bold) },
-                text = {
-                    Column(
-                        modifier = Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        TText(TERMS_AND_CONDITIONS_TEXT, color = Color.White, fontSize = 13.sp)
-                    }
-                },
-            )
-        }
     }
 }
 
-// ponytail: same copy as the website Terms & Conditions modal. Placeholder wording;
-// real Terms / Privacy / Community Guidelines content comes later.
-private const val TERMS_AND_CONDITIONS_TEXT =
-    "Welcome to SoundSpire. By using our services, you agree to comply with all applicable laws " +
-    "and respect the intellectual property rights of other creators.\n\n" +
-    "By creating an account, you agree that all provided information is accurate and up to date. " +
-    "You authorize our platform to manage and display your profile.\n\n" +
-    "You agree not to upload or distribute any content that infringes on intellectual property " +
-    "rights or promotes illegal activity.\n\n" +
-    "You grant us a worldwide, non-exclusive license to promote and distribute your submitted works.\n\n" +
-    "Any disputes will be resolved under your country's jurisdiction."
+// Public web Terms of Service (single source of truth; opens in browser).
+private const val TERMS_URL = "https://soundspire.online/terms"
+
+private fun openUrl(context: android.content.Context, url: String) {
+    try {
+        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    } catch (_: Exception) {}
+}
 
 @Composable
 private fun SignupField(
