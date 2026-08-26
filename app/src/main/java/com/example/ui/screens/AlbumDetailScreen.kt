@@ -101,6 +101,7 @@ fun AlbumDetailScreen(
     var userRating by remember { mutableStateOf(0) }
     var reviewText by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
+    var submitError by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -192,22 +193,39 @@ fun AlbumDetailScreen(
                     }
                     Spacer(modifier = Modifier.height(14.dp))
                     OutlinedTextField(
-                        value = reviewText, onValueChange = { reviewText = it },
+                        value = reviewText, onValueChange = { reviewText = it; submitError = null },
                         placeholder = { TText("Share your thoughts...", color = TextMuted) },
                         modifier = Modifier.fillMaxWidth().height(100.dp), shape = RoundedCornerShape(8.dp),
                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AccentOrange, unfocusedBorderColor = TextMuted.copy(alpha = 0.3f), focusedTextColor = TextWhite, unfocusedTextColor = TextWhite, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent)
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TText("${reviewText.trim().length} characters", color = TextMuted, fontSize = 11.sp)
+                    submitError?.let {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TText(it, color = Color(0xFFEF4444), fontSize = 12.sp)
+                    }
                     Spacer(modifier = Modifier.height(10.dp))
                     Button(
                         onClick = {
                             if (reviewText.isBlank()) return@Button
+                            submitError = null
                             submitting = true
                             CoroutineScope(Dispatchers.Main).launch {
                                 try {
                                     api.submitReview(SubmitReviewRequest(reviewKey, reviewText, if (userRating > 0) userRating.toDouble() else null))
                                     reviewText = ""
                                     reviews = api.getTrackReviews(reviewKey).reviews
-                                } catch (_: Exception) {}
+                                } catch (e: retrofit2.HttpException) {
+                                    val body = e.response()?.errorBody()?.string()
+                                    submitError = body?.let {
+                                        try {
+                                            val j = org.json.JSONObject(it)
+                                            j.optString("error", "").ifBlank { j.optString("message", "") }
+                                        } catch (_: Exception) { "" }
+                                    }?.takeIf { it.isNotBlank() } ?: "Couldn't submit review (${e.code()})."
+                                } catch (e: Exception) {
+                                    submitError = "Couldn't submit review. Please try again."
+                                }
                                 submitting = false
                             }
                         },

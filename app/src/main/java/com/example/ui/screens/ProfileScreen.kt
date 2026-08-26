@@ -85,6 +85,7 @@ fun ProfileScreen(
     onLogout: () -> Unit,
     onSwitchToArtist: () -> Unit = {},
     onSettings: () -> Unit = {},
+    onCommunityClick: (slug: String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val api = remember { ApiClient.getService(context) }
@@ -213,7 +214,12 @@ fun ProfileScreen(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         items(subscriptions) { sub ->
                             val subImg = resolveImageUrl(sub.artist_profile_picture_url ?: sub.artist_cover_photo_url) ?: defaultProfileImageUrl()
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(80.dp)) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.width(80.dp).clickable(enabled = !sub.artist_slug.isNullOrBlank()) {
+                                    sub.artist_slug?.let { onCommunityClick(it) }
+                                }
+                            ) {
                                 AsyncImage(
                                     model = subImg,
                                     contentDescription = null,

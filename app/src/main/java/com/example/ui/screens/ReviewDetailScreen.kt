@@ -97,6 +97,7 @@ fun ReviewDetailScreen(
     var userRating by remember { mutableStateOf(0) }
     var reviewText by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
+    var submitError by remember { mutableStateOf<String?>(null) }
     var infoTab by remember { mutableStateOf("credits") } // "credits" | "details"
     var currentUserId by remember { mutableStateOf<String?>(null) }
 
@@ -291,16 +292,23 @@ fun ReviewDetailScreen(
                         TText("Write a review", color = TextWhite, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.height(6.dp))
                         OutlinedTextField(
-                            value = reviewText, onValueChange = { reviewText = it },
+                            value = reviewText, onValueChange = { reviewText = it; submitError = null },
                             placeholder = { TText("Share your thoughts...", color = TextMuted) },
                             modifier = Modifier.fillMaxWidth().height(100.dp),
                             shape = RoundedCornerShape(8.dp),
                             colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AccentOrange, unfocusedBorderColor = CardBorder, focusedTextColor = TextWhite, unfocusedTextColor = TextWhite, focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent)
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TText("${reviewText.trim().length} characters", color = TextMuted, fontSize = 11.sp)
+                        submitError?.let {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            TText(it, color = Color(0xFFEF4444), fontSize = 12.sp)
+                        }
                         Spacer(modifier = Modifier.height(10.dp))
                         Button(
                             onClick = {
                                 if (reviewText.isBlank()) return@Button
+                                submitError = null
                                 submitting = true
                                 CoroutineScope(Dispatchers.Main).launch {
                                     try {
@@ -308,7 +316,18 @@ fun ReviewDetailScreen(
                                         reviewText = ""
                                         val refreshed = api.getTrackReviews(trackId)
                                         reviews = refreshed.reviews
-                                    } catch (_: Exception) { }
+                                    } catch (e: retrofit2.HttpException) {
+                                        // Surface the backend's reason (e.g. minimum length) instead of failing silently.
+                                        val body = e.response()?.errorBody()?.string()
+                                        submitError = body?.let {
+                                            try {
+                                                val j = org.json.JSONObject(it)
+                                                j.optString("error", "").ifBlank { j.optString("message", "") }
+                                            } catch (_: Exception) { "" }
+                                        }?.takeIf { it.isNotBlank() } ?: "Couldn't submit review (${e.code()})."
+                                    } catch (e: Exception) {
+                                        submitError = "Couldn't submit review. Please try again."
+                                    }
                                     submitting = false
                                 }
                             },

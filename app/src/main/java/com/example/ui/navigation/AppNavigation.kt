@@ -277,7 +277,8 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                             navController.navigate(Routes.ARTIST_ONBOARDING)
                         }
                     },
-                    onSettings = { navController.navigate(Routes.SETTINGS) }
+                    onSettings = { navController.navigate(Routes.SETTINGS) },
+                    onCommunityClick = { slug -> navController.navigate("${Routes.COMMUNITY_DETAIL}/$slug/about") }
                 )
             }
             composable(Routes.SETTINGS) {
@@ -326,6 +327,7 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                     onTrackClick = { trackId -> navController.navigate("${Routes.REVIEW_DETAIL}/$trackId") },
                     onCommunityClick = { slug -> navController.navigate("${Routes.COMMUNITY_DETAIL}/$slug/about") },
                     onVoteClick = { uuid -> navController.navigate("${Routes.ARTIST_VOTE}/$uuid") },
+                    onAlbumClick = { albumId -> navController.navigate("${Routes.ALBUM_DETAIL}/$albumId") },
                 )
             }
             composable("${Routes.ARTIST_VOTE}/{uuid}") { backStackEntry ->

@@ -74,6 +74,7 @@ fun ArtistCatalogScreen(
     onTrackClick: (String) -> Unit,
     onCommunityClick: (slug: String) -> Unit,
     onVoteClick: (soundchartsUuid: String) -> Unit,
+    onAlbumClick: (albumId: String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val api = remember { ApiClient.getService(context) }
@@ -194,7 +195,7 @@ fun ArtistCatalogScreen(
                     item { TText("No releases found.", color = TextMuted, fontSize = 13.sp, modifier = Modifier.padding(20.dp)) }
                 } else {
                     items(albums.size) { idx ->
-                        AlbumRow(albums[idx])
+                        AlbumRow(albums[idx], onClick = { albums[idx].id?.let { onAlbumClick(it) } })
                     }
                 }
             }
@@ -223,9 +224,9 @@ private fun TopTrackRow(track: CatalogTopTrack, index: Int, onClick: () -> Unit)
 }
 
 @Composable
-private fun AlbumRow(album: CatalogArtistAlbum) {
+private fun AlbumRow(album: CatalogArtistAlbum, onClick: () -> Unit = {}) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 20.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsyncImage(model = album.images?.firstOrNull()?.url, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(56.dp).clip(RoundedCornerShape(8.dp)).background(Color.DarkGray))
