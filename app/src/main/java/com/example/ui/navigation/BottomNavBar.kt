@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -49,7 +50,16 @@ val navItems = listOf(
 
 @Composable
 fun BottomNavBar(navController: NavController, currentRoute: String?) {
-    Column {
+    // enableEdgeToEdge() draws behind the system bars, so we must inset the bar by the
+    // navigation-bar height ourselves — otherwise the 3-button nav overlaps the tap targets
+    // (gesture nav has a tiny inset and hides the bug). Background fills behind the inset so
+    // the bar reads as intentionally edge-to-edge.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SurfaceDark.copy(alpha = 0.95f))
+            .navigationBarsPadding()
+    ) {
         // Top border line
         Box(
             modifier = Modifier
@@ -62,7 +72,6 @@ fun BottomNavBar(navController: NavController, currentRoute: String?) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp)
-                .background(SurfaceDark.copy(alpha = 0.95f))
                 .padding(horizontal = 4.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
