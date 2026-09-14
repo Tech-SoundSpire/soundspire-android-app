@@ -8,7 +8,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.example.ui.components.UpdateChecker
+// import com.example.ui.components.UpdateChecker  // in-app update prompt disabled
 import com.example.ui.navigation.AppNavigation
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.AuthViewModel
@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
                 CompositionLocalProvider(LocalLanguage provides lang) {
                     AppNavigation(authViewModel = authViewModel)
                     // Checks /api/app-version on launch; prompts to update if this build is behind.
-                    UpdateChecker()
+                    // UpdateChecker()  // in-app update prompt disabled
                 }
             }
         }

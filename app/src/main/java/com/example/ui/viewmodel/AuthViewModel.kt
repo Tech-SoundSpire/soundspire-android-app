@@ -236,6 +236,18 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         _needsCompleteProfile.value = false
     }
 
+    /**
+     * Re-check preferences after the profile is completed. Needed because the Google mobile-auth
+     * response reports needsPreferences=false for a brand-new user (its profile was still
+     * incomplete at login), so the value must be refreshed once the profile is done.
+     */
+    suspend fun refreshNeedsPreferences(): Boolean {
+        val userId = runCatching { api.getSession().user?.id }.getOrNull()
+        val needs = computeNeedsPreferences(userId)
+        _needsPreferences.value = needs
+        return needs
+    }
+
     /** Mark preferences as set after the user finishes preference selection. */
     fun markPreferencesComplete() {
         _needsPreferences.value = false

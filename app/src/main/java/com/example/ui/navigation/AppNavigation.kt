@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -91,6 +93,7 @@ val bottomNavRoutes = listOf(
 @Composable
 fun AppNavigation(authViewModel: AuthViewModel) {
     val navController = rememberNavController()
+    val scope = rememberCoroutineScope()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
     val isLoading by authViewModel.isLoading.collectAsState()
 
@@ -165,10 +168,14 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                 CompleteProfileScreen(
                     authViewModel = authViewModel,
                     onComplete = {
-                        // Skip preferences if the user already has them (e.g. artist-turned-fan).
-                        val dest = if (authViewModel.needsPreferences.value) Routes.PREFERENCES else Routes.EXPLORE
-                        navController.navigate(dest) {
-                            popUpTo(Routes.COMPLETE_PROFILE) { inclusive = true }
+                        // Re-check preferences now that the profile is done (Google new-users
+                        // report needsPreferences=false at login). Skip only if they truly exist
+                        // (e.g. artist-turned-fan).
+                        scope.launch {
+                            val dest = if (authViewModel.refreshNeedsPreferences()) Routes.PREFERENCES else Routes.EXPLORE
+                            navController.navigate(dest) {
+                                popUpTo(Routes.COMPLETE_PROFILE) { inclusive = true }
+                            }
                         }
                     }
                 )
