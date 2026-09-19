@@ -44,6 +44,7 @@ import com.example.data.remote.ApiClient
 import com.example.data.remote.CommunitySlugArtist
 import com.example.data.remote.SubscribeRequest
 import com.example.ui.screens.artist.AllChatScreen
+import com.example.ui.screens.artist.SuggestionsScreen
 import com.example.ui.screens.artist.ArtistForumScreen
 import com.example.ui.screens.artist.FanArtScreen
 import com.example.ui.theme.AccentOrange
@@ -78,6 +79,7 @@ fun CommunityDetailScreen(
     var loading by remember { mutableStateOf(true) }
     var chatForumId by remember { mutableStateOf<String?>(null) }
     var fanArtForumId by remember { mutableStateOf<String?>(null) }
+    var suggestionsForumId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var currentUserName by remember { mutableStateOf<String?>(null) }
     var subscriberCount by remember { mutableStateOf(0) }
@@ -109,6 +111,7 @@ fun CommunityDetailScreen(
                         val forums = api.getCommunityForums(cid).forums
                         chatForumId = forums.firstOrNull { (it.name ?: "").contains("chat", true) || (it.forum_type ?: "").contains("chat", true) }?.forum_id ?: forums.firstOrNull()?.forum_id
                         fanArtForumId = forums.firstOrNull { (it.name ?: "").contains("art", true) || (it.forum_type ?: "").contains("art", true) }?.forum_id
+                        suggestionsForumId = forums.firstOrNull { (it.name ?: "").contains("suggest", true) || (it.forum_type ?: "").contains("suggest", true) }?.forum_id
                     } catch (_: Exception) {}
                 }
                 // If deep-linked to a gated tab but not allowed, fall back to About.
@@ -196,7 +199,7 @@ fun CommunityDetailScreen(
 
         // Tab bar — content tabs show a lock when not subscribed
         Row(modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.2f)).padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceAround) {
-            listOf("about" to "About", "forum" to "Forum", "all-chat" to "All Chat", "fan-art" to "Fan Art").forEach { (key, label) ->
+            listOf("about" to "About", "forum" to "Forum", "all-chat" to "All Chat", "fan-art" to "Fan Art", "suggestions" to "Suggestions").forEach { (key, label) ->
                 val gated = key != "about" && !canAccess
                 Text(
                     if (gated) "🔒 $label" else label,
@@ -248,6 +251,11 @@ fun CommunityDetailScreen(
             "fan-art" -> {
                 val fid = fanArtForumId
                 if (fid != null) FanArtScreen(forumId = fid, currentUserId = currentUserId)
+                else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ArtistOrange, modifier = Modifier.size(24.dp)) }
+            }
+            "suggestions" -> {
+                val fid = suggestionsForumId
+                if (fid != null) SuggestionsScreen(forumId = fid, currentUserId = currentUserId, communityId = cid, currentUserName = currentUserName, isArtist = isOwnCommunity)
                 else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ArtistOrange, modifier = Modifier.size(24.dp)) }
             }
         }

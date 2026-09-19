@@ -63,6 +63,7 @@ import com.example.ui.theme.TextWhite
 import com.example.ui.screens.artist.AllChatScreen
 import com.example.ui.screens.artist.ArtistForumScreen
 import com.example.ui.screens.artist.FanArtScreen
+import com.example.ui.screens.artist.SuggestionsScreen
 import com.example.util.S3Uploader
 import com.example.util.defaultProfileImageUrl
 import com.example.util.resolveImageUrl
@@ -94,6 +95,7 @@ fun ArtistDashboardScreen(
     var tab by remember { mutableStateOf("about") }
     var chatForumId by remember { mutableStateOf<String?>(null) }
     var fanArtForumId by remember { mutableStateOf<String?>(null) }
+    var suggestionsForumId by remember { mutableStateOf<String?>(null) }
     var currentUserId by remember { mutableStateOf<String?>(null) }
     var subscriberCount by remember { mutableStateOf(0) }
     var notifications by remember { mutableStateOf<List<com.example.data.remote.NotificationItem>>(emptyList()) }
@@ -116,6 +118,7 @@ fun ArtistDashboardScreen(
                         val forums = api.getCommunityForums(cid).forums
                         chatForumId = forums.firstOrNull { (it.name ?: "").contains("chat", true) || (it.forum_type ?: "").contains("chat", true) }?.forum_id ?: forums.firstOrNull()?.forum_id
                         fanArtForumId = forums.firstOrNull { (it.name ?: "").contains("art", true) || (it.forum_type ?: "").contains("art", true) }?.forum_id
+                        suggestionsForumId = forums.firstOrNull { (it.name ?: "").contains("suggest", true) || (it.forum_type ?: "").contains("suggest", true) }?.forum_id
                     } catch (e: Exception) { android.util.Log.e("ArtistDash", "forums failed", e) }
                 }
             } catch (e: Exception) { android.util.Log.e("ArtistDash", "getArtistMe failed", e) }
@@ -185,7 +188,7 @@ fun ArtistDashboardScreen(
 
         // Tab bar
         Row(modifier = Modifier.fillMaxWidth().background(Color.Black.copy(alpha = 0.2f)).padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceAround) {
-            listOf("about" to "Home", "forum" to "Forum", "all-chat" to "All Chat", "fan-art" to "Fan Art").forEach { (key, label) ->
+            listOf("about" to "Home", "forum" to "Forum", "all-chat" to "All Chat", "fan-art" to "Fan Art", "suggestions" to "Suggestions").forEach { (key, label) ->
                 Text(
                     label,
                     color = if (tab == key) ArtistOrange else TextMuted,
@@ -250,6 +253,12 @@ fun ArtistDashboardScreen(
             "fan-art" -> {
                 val fid = fanArtForumId
                 if (fid != null) FanArtScreen(forumId = fid, currentUserId = currentUserId)
+                else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ArtistOrange, modifier = Modifier.size(24.dp)) }
+                return@Column
+            }
+            "suggestions" -> {
+                val fid = suggestionsForumId
+                if (fid != null) SuggestionsScreen(forumId = fid, currentUserId = currentUserId, communityId = a.community?.community_id, currentUserName = a.artist_name, isArtist = true)
                 else Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = ArtistOrange, modifier = Modifier.size(24.dp)) }
                 return@Column
             }
