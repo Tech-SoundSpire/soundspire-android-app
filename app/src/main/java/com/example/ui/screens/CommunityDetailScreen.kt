@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -333,17 +334,23 @@ private fun CommunityAboutTab(
             }
         }
 
-        // Community Highlights (static, mirrors web)
-        if (artist?.community != null) {
+        // Community Highlights (artist-configured; hidden when empty)
+        val highlights = artist?.community?.highlights.orEmpty()
+        if (highlights.isNotEmpty()) {
             item {
                 SectionCard("Community Highlights") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("Be a part of the TRIBE", "Get Access to the Screens", "Tap into the Global Community").forEach { h ->
+                        highlights.forEach { h ->
                             Box(
-                                modifier = Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(12.dp))
-                                    .background(Color(0xFF2D1B4E)).padding(12.dp),
+                                modifier = Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF2D1B4E)),
                                 contentAlignment = Alignment.BottomStart
-                            ) { Text(h, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
+                            ) {
+                                if (!h.imageUrl.isNullOrBlank()) {
+                                    AsyncImage(model = resolveImageUrl(h.imageUrl), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                    Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))))
+                                }
+                                Text(h.text, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(12.dp))
+                            }
                         }
                     }
                 }

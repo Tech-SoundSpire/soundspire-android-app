@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.remote.ApiClient
 import com.example.data.remote.ArtistEditRequest
+import com.example.data.remote.CommunityHighlight
 import com.example.data.remote.ArtistMe
 import com.example.data.remote.ArtistSocial
 import com.example.ui.theme.TextMuted
@@ -134,6 +135,24 @@ fun ArtistDashboardScreen(
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null && artist != null) uploadImage(context, uri, "cover", artist!!) { reload(); imgBust = System.nanoTime() }
     }
+
+    // Community Highlights edit state
+    var editingHL by remember { mutableStateOf(false) }
+    var highlightDraft by remember { mutableStateOf<List<CommunityHighlight>>(emptyList()) }
+    var savingHL by remember { mutableStateOf(false) }
+    fun pickHighlight(index: Int, uri: Uri?) {
+        if (uri == null || artist == null) return
+        CoroutineScope(Dispatchers.Main).launch {
+            val fileName = "images/artists/${artist!!.artist_id}-highlight-$index-${System.nanoTime()}.jpg"
+            val path = S3Uploader.upload(context, uri, fileName) ?: return@launch
+            highlightDraft = highlightDraft.toMutableList().also { it[index] = it[index].copy(imageUrl = path) }
+        }
+    }
+    val hlPickers = listOf(
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { pickHighlight(0, it) },
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { pickHighlight(1, it) },
+        rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { pickHighlight(2, it) },
+    )
 
     if (loading) {
         Box(modifier = Modifier.fillMaxSize().background(DashBg), contentAlignment = Alignment.Center) {
@@ -378,6 +397,84 @@ fun ArtistDashboardScreen(
                     }
                 } else {
                     Text("No social links. Click Edit Profile to add some.", color = TextMuted, fontSize = 13.sp)
+                }
+            }
+        }
+
+        // Community Highlights (artist-editable: image + text)
+        if (a.community != null) {
+            item {
+                Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp)).background(Color(0xFF221C2F)).padding(16.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Community Highlights", color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (!editingHL) {
+                            OutlinedButton(onClick = {
+                                val hl = a.community?.highlights.orEmpty()
+                                highlightDraft = (0..2).map { i -> hl.getOrElse(i) { CommunityHighlight() } }
+                                editingHL = true
+                            }, shape = RoundedCornerShape(8.dp)) {
+                                Icon(Icons.Default.Edit, null, tint = TextWhite, modifier = Modifier.size(12.dp)); Spacer(modifier = Modifier.width(4.dp)); Text("Edit", color = TextWhite, fontSize = 12.sp)
+                            }
+                        } else {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { editingHL = false }, shape = RoundedCornerShape(8.dp)) { Text("Cancel", color = TextWhite, fontSize = 12.sp) }
+                                Button(
+                                    onClick = {
+                                        savingHL = true
+                                        CoroutineScope(Dispatchers.Main).launch {
+                                            val cleaned = highlightDraft.map { it.copy(text = it.text.trim().take(120)) }
+                                                .filter { !it.imageUrl.isNullOrBlank() || it.text.isNotBlank() }
+                                            try { api.editArtistMe(ArtistEditRequest(highlights = cleaned)); editingHL = false; reload() } catch (_: Exception) { }
+                                            savingHL = false
+                                        }
+                                    },
+                                    enabled = !savingHL,
+                                    colors = ButtonDefaults.buttonColors(containerColor = ArtistOrange), shape = RoundedCornerShape(8.dp)
+                                ) { Text(if (savingHL) "Saving..." else "Save", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    if (editingHL) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            highlightDraft.forEachIndexed { i, h ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Box(
+                                        modifier = Modifier.size(width = 64.dp, height = 48.dp).clip(RoundedCornerShape(8.dp)).background(DashBg)
+                                            .clickable { hlPickers[i].launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (!h.imageUrl.isNullOrBlank()) AsyncImage(model = resolveImageUrl(h.imageUrl), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                        else Icon(Icons.Default.Add, null, tint = TextMuted, modifier = Modifier.size(20.dp))
+                                    }
+                                    OutlinedTextField(
+                                        value = h.text,
+                                        onValueChange = { v -> highlightDraft = highlightDraft.toMutableList().also { it[i] = it[i].copy(text = v.take(120)) } },
+                                        placeholder = { Text("Highlight text", color = TextMuted) },
+                                        modifier = Modifier.weight(1f), singleLine = true, colors = dashFieldColors(),
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        val hl = a.community?.highlights.orEmpty()
+                        if (hl.isEmpty()) {
+                            Text("No highlights yet. Click Edit to add image + text cards.", color = TextMuted, fontSize = 13.sp)
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                hl.forEach { h ->
+                                    Box(modifier = Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(12.dp)).background(Color(0xFF2D1B4E)), contentAlignment = Alignment.BottomStart) {
+                                        if (!h.imageUrl.isNullOrBlank()) {
+                                            AsyncImage(model = resolveImageUrl(h.imageUrl), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                                            Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))))
+                                        }
+                                        Text(h.text, color = TextWhite, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(12.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

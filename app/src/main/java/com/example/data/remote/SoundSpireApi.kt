@@ -120,6 +120,18 @@ data class ExploreArtist(
 
 data class GenreItem(val genre_id: String, val name: String)
 
+data class GenreArtistItem(
+    val artist_id: String,
+    val name: String? = null,
+    val imageUrl: String? = null,
+    val slug: String? = null,
+    val onSoundSpire: Boolean = false,
+    val soundcharts_uuid: String? = null,
+    val subscriberCount: Int = 0,
+)
+
+data class GenreArtistsResponse(val genre: GenreItem? = null, val artists: List<GenreArtistItem> = emptyList())
+
 data class SongReview(
     val review_id: String,
     val spotify_track_id: String,
@@ -411,13 +423,21 @@ data class ArtistMe(
     val socials: List<ArtistSocial> = emptyList(),
     val community: ArtistCommunity? = null,
 )
-data class ArtistCommunity(val community_id: String? = null, val name: String? = null, val description: String? = null)
+data class CommunityHighlight(val imageUrl: String? = null, val text: String = "")
+
+data class ArtistCommunity(
+    val community_id: String? = null,
+    val name: String? = null,
+    val description: String? = null,
+    val highlights: List<CommunityHighlight> = emptyList(),
+)
 
 data class ArtistEditRequest(
     val bio: String? = null,
     val profile_picture_url: String? = null,
     val cover_photo_url: String? = null,
     val socials: List<ArtistSocial>? = null,
+    val highlights: List<CommunityHighlight>? = null,
 )
 
 data class ArtistReview(
@@ -669,6 +689,9 @@ interface SoundSpireService {
 
     @GET("api/explore/genres")
     suspend fun getGenres(): List<GenreItem>
+
+    @GET("api/explore/genres/{genreId}/artists")
+    suspend fun getGenreArtists(@Path("genreId") genreId: String): GenreArtistsResponse
 
     @GET("api/catalog/song-reviews/feed")
     suspend fun getReviewsFeed(@Query("page") page: Int = 1): ReviewsFeedResponse
