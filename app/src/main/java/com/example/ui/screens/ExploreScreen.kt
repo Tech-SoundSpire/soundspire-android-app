@@ -4,6 +4,8 @@ import com.example.ui.components.TText
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,20 +70,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-// Genre card gradient colors
-private val genreGradients = listOf(
-    listOf(Color(0xFF667EEA), Color(0xFF764BA2)),
-    listOf(Color(0xFFF093FB), Color(0xFFF5576C)),
-    listOf(Color(0xFF4FACFE), Color(0xFF00F2FE)),
-    listOf(Color(0xFF43E97B), Color(0xFF38F9D7)),
-    listOf(Color(0xFFFA709A), Color(0xFFFEE140)),
-    listOf(Color(0xFFA18CD1), Color(0xFFFBC2EB)),
-    listOf(Color(0xFFFF9A9E), Color(0xFFFECFEF)),
-    listOf(Color(0xFF89F7FE), Color(0xFF66A6FF)),
-)
-
 @Composable
-fun ExploreScreen(onSearchClick: () -> Unit = {}, onSeeAllReviews: () -> Unit = {}, onSeeMoreArtists: () -> Unit = {}, onReviewClick: (String) -> Unit = {}, onArtistVoteClick: (String) -> Unit = {}, onArtistCommunityClick: (String) -> Unit = {}) {
+fun ExploreScreen(onSearchClick: () -> Unit = {}, onSeeAllReviews: () -> Unit = {}, onSeeMoreArtists: () -> Unit = {}, onReviewClick: (String) -> Unit = {}, onArtistVoteClick: (String) -> Unit = {}, onArtistCommunityClick: (String) -> Unit = {}, onGenreClick: (String, String) -> Unit = { _, _ -> }) {
     val context = LocalContext.current
     val api = remember { ApiClient.getService(context) }
 
@@ -291,28 +282,14 @@ fun ExploreScreen(onSearchClick: () -> Unit = {}, onSeeAllReviews: () -> Unit = 
                 item {
                     val rows = genres.chunked(2)
                     Column(modifier = Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        rows.forEachIndexed { rowIdx, row ->
+                        rows.forEach { row ->
                             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                row.forEachIndexed { colIdx, genre ->
-                                    val gradientIdx = (rowIdx * 2 + colIdx) % genreGradients.size
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .aspectRatio(4f / 3f)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(Brush.linearGradient(genreGradients[gradientIdx]))
-                                            .clickable { },
-                                        contentAlignment = Alignment.BottomStart
-                                    ) {
-                                        Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)))))
-                                        TText(
-                                            text = genre.name.uppercase(),
-                                            color = Color.White,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(12.dp)
-                                        )
-                                    }
+                                row.forEach { genre ->
+                                    GenreCard(
+                                        genre = genre,
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { onGenreClick(genre.genre_id, genre.name) },
+                                    )
                                 }
                                 if (row.size == 1) Spacer(modifier = Modifier.weight(1f))
                             }
@@ -416,4 +393,56 @@ private fun ReviewCard(review: SongReview, onReviewClick: (String) -> Unit = {})
             }
         }
     }
+}
+
+// Frosted-glass genre card matching the website: white translucent fill, big emoji,
+// purple→orange gradient name.
+@Composable
+private fun GenreCard(genre: GenreItem, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(
+        modifier = modifier
+            .aspectRatio(4f / 3f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.20f)), RoundedCornerShape(16.dp))
+            .clickable { onClick() },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        TText(genreEmoji(genre.name), fontSize = 44.sp)
+        Spacer(modifier = Modifier.height(6.dp))
+        TText(
+            text = genre.name,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 8.dp),
+            style = TextStyle(brush = Brush.horizontalGradient(listOf(Color(0xFFC084FC), Color(0xFFFA6400)))),
+        )
+    }
+}
+
+// Curated emoji per genre with a deterministic hash fallback (mirrors genreVisuals.ts on web).
+private val GENRE_EMOJI = mapOf(
+    "pop" to "🎵", "k-pop" to "🧑‍🎤", "asian pop" to "🏮", "asian" to "🏮", "latino" to "💃", "latin" to "💃",
+    "rock" to "🎸", "alternative" to "🎸", "indie" to "🎹", "punk" to "⚡", "metal" to "🤘", "grunge" to "🎸",
+    "hip hop rap" to "🎤", "hip hop" to "🎤", "rap" to "🎤", "trap" to "🎤",
+    "r b soul" to "🎙️", "r&b" to "🎙️", "soul" to "🎙️", "funk" to "🕺", "disco" to "🪩", "gospel" to "🙌",
+    "jazz" to "🎺", "blues" to "🎷", "classical" to "🎻", "opera" to "🎭", "orchestra" to "🎻",
+    "country" to "🤠", "folk" to "🪕", "bluegrass" to "🪕",
+    "electronic" to "🎛️", "edm" to "🎛️", "house" to "🏠", "techno" to "🔊", "trance" to "🌀",
+    "dubstep" to "🔊", "ambient" to "🌌", "lofi" to "🎧", "lo-fi" to "🎧",
+    "reggae" to "🌴", "reggaeton" to "🌴", "afrobeat" to "🥁", "afro" to "🥁", "world" to "🌍",
+)
+private val EMOJI_POOL = listOf("🎵", "🎸", "🎷", "🎺", "🥁", "🎹", "🎤", "🎧", "🪕", "🎻", "🪗", "🎶", "🔊", "💽", "📀")
+
+private fun genreEmoji(name: String?): String {
+    if (name.isNullOrBlank()) return "🎶"
+    val k = name.trim().lowercase()
+    GENRE_EMOJI[k]?.let { return it }
+    var h = 0
+    for (c in k) h = (h * 31 + c.code)
+    return EMOJI_POOL[((h % EMOJI_POOL.size) + EMOJI_POOL.size) % EMOJI_POOL.size]
 }

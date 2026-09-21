@@ -1,0 +1,183 @@
+package com.example.shared.supabase
+
+import com.example.shared.SharedConfig
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.postgrest.query.filter.FilterOperator
+import io.github.jan.supabase.realtime.PostgresAction
+import io.github.jan.supabase.realtime.Realtime
+import io.github.jan.supabase.realtime.channel
+import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.presenceChangeFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+
+/**
+ * Supabase client for All Chat — talks directly to the `forum_posts` table and
+ * subscribes to realtime postgres changes, mirroring the web client.
+ * Ported to KMP from the Android app's SupabaseManager (Supabase-kt is multiplatform).
+ */
+object SupabaseManager {
+    val client by lazy {
+        createSupabaseClient(
+            supabaseUrl = SharedConfig.SUPABASE_URL,
+            supabaseKey = SharedConfig.SUPABASE_ANON_KEY,
+        ) {
+            install(Postgrest)
+            install(Realtime)
+        }
+    }
+
+    /**
+     * A forum_posts row as stored in Supabase. The backend `/messages` endpoint strips
+     * `parent_post_id` and `reactions`, so we read directly from Supabase.
+     */
+    @Serializable
+    data class ForumPostRow(
+        val forum_post_id: String,
+        val forum_id: String? = null,
+        val user_id: String? = null,
+        val content: String? = null,
+        val media_type: String? = null,
+        val media_urls: List<String>? = null,
+        val parent_post_id: String? = null,
+        val created_at: String? = null,
+        val reactions: Map<String, List<String>>? = null,
+        val is_hidden: Boolean? = null,
+    )
+
+    /**
+     * Read all messages for a forum directly from Supabase (includes parent_post_id +
+     * reactions). Excludes moderator-hidden posts. Blocked-author filtering is applied
+     * by the caller, which knows the viewer's block list.
+     */
+    suspend fun fetchMessages(forumId: String, limit: Long = 200): List<ForumPostRow> {
+        return client.from("forum_posts").select {
+            filter {
+                eq("forum_id", forumId)
+                eq("is_hidden", false)
+            }
+            order("created_at", Order.ASCENDING)
+            limit(limit)
+        }.decodeList()
+    }
+
+    /**
+     * Subscribe to realtime INSERT/UPDATE/DELETE on forum_posts for a forum.
+     * Subscribes the channel, returns the action flow, and unsubscribes on completion.
+     */
+    suspend fun forumChanges(forumId: String): Flow<PostgresAction> {
+        val channel = client.channel("forum:$forumId")
+        val flow = channel.postgresChangeFlow<PostgresAction>(schema = "public") {
+            table = "forum_posts"
+            filter("forum_id", FilterOperator.EQ, forumId)
+        }
+        channel.subscribe()
+        return flow.onCompletion {
+            try { channel.unsubscribe() } catch (_: Exception) {}
+        }
+    }
+
+    data class OnlineUser(val userId: String, val username: String)
+
+    // One long-lived shared presence flow per community, reused across screen remounts
+    // so navigating away and back doesn't churn the subscription (which dropped the
+    // count back to 1). Cache access is guarded by a Mutex (was @Synchronized on
+    // Android; @Synchronized is JVM-only, so a coroutines Mutex is used for KMP).
+    private val presenceScope = CoroutineScope(Dispatchers.Default)
+    private val presenceMutex = Mutex()
+    private val presenceFlows = mutableMapOf<String, Flow<List<OnlineUser>>>()
+
+    /**
+     * Track presence in a community's presence channel and emit the current online users
+     * whenever someone joins/leaves. Mirrors the web `useCommunityPresence`.
+     *
+     * Three things are critical to match the web behavior:
+     *  1. Presence is keyed by `userId` (web uses `presence: { key: user.id }`).
+     *  2. The presence-change callback MUST be registered BEFORE `subscribe()`, otherwise
+     *     the initial full PRESENCE_STATE sync is delivered before we listen and is lost.
+     *  3. The channel is kept alive (shareIn with a stop timeout) so quick remounts reuse it.
+     */
+    fun communityPresence(communityId: String, userId: String, username: String): Flow<List<OnlineUser>> = flow {
+        val shared = presenceMutex.withLock {
+            presenceFlows.getOrPut(communityId) {
+                buildPresenceFlow(communityId, userId, username)
+            }
+        }
+        emitAll(shared)
+    }
+
+    private fun buildPresenceFlow(communityId: String, userId: String, username: String): Flow<List<OnlineUser>> {
+        val upstream = channelFlow {
+            val channel = client.channel("community:$communityId:presence") {
+                presence { key = userId }
+            }
+
+            // Ref-count presences per user. A user is online while they have >=1 live
+            // presence ref. Removing only the *specific* old ref on a leave leaves a
+            // concurrent new ref intact, so a reload doesn't drop the count.
+            val refs = mutableMapOf<String, MutableSet<String>>()
+            val names = mutableMapOf<String, String>()
+
+            fun snapshot(): List<OnlineUser> =
+                refs.filterValues { it.isNotEmpty() }.keys.map { OnlineUser(it, names[it] ?: "User") }
+
+            // Start collecting BEFORE subscribing so the initial PRESENCE_STATE is captured.
+            val job = launch {
+                channel.presenceChangeFlow().collect { action ->
+                    action.leaves.forEach { (key, presence) ->
+                        refs[key]?.remove(presence.presenceRef)
+                        if (refs[key]?.isEmpty() == true) { refs.remove(key); names.remove(key) }
+                    }
+                    action.joins.forEach { (key, presence) ->
+                        refs.getOrPut(key) { mutableSetOf() }.add(presence.presenceRef)
+                        val name = try {
+                            (presence.state["username"] as? JsonPrimitive)?.content
+                        } catch (_: Exception) { null }
+                        if (name != null) names[key] = name
+                    }
+                    trySend(snapshot())
+                }
+            }
+
+            channel.subscribe(blockUntilSubscribed = true)
+            try {
+                channel.track(buildJsonObject {
+                    put("user_id", userId)
+                    put("username", username)
+                })
+            } catch (_: Exception) {}
+
+            awaitClose {
+                job.cancel()
+                CoroutineScope(Dispatchers.Default).launch {
+                    try { channel.unsubscribe() } catch (_: Exception) {}
+                }
+            }
+        }
+        // Keep the channel subscribed 30s after the last collector leaves, so a
+        // navigate-away-and-back reuses it. replay=1 re-emits the latest count instantly.
+        return upstream.shareIn(
+            scope = presenceScope,
+            started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 30_000),
+            replay = 1,
+        )
+    }
+}

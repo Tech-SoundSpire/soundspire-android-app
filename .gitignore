@@ -21,3 +21,13 @@ my-upload-key.jks
 *.jks
 keystore.properties
 *.apk
+ios-spike/
+/Users/jkssrs/Documents/SS_01/android/soundspire/CLAUDE.md
+CLAUDE.md
+PLAN.md
+IOS_APP_OPTIONS.md
+docs/ios/design.md
+docs/ios/requirements.md
+docs/ios/tasks.md
+shared/build/
+

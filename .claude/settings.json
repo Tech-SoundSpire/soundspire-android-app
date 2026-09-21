@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '{print $5}')"
+    ]
+  },
+  "worktree": {
+    "bgIsolation": "none"
+  }
+}

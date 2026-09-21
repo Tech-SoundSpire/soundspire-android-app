@@ -27,15 +27,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -218,12 +223,35 @@ fun FanArtScreen(forumId: String, currentUserId: String? = null) {
                             val authorId = post.user_id
                             if (authorId != null && authorId != currentUserId) {
                                 Spacer(modifier = Modifier.weight(1f))
-                                Text("Report", color = TextMuted, fontSize = 12.sp, modifier = Modifier.clickable { reportingPostId = post.forum_post_id })
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text("Block", color = Color(0xFFEF4444), fontSize = 12.sp, modifier = Modifier.clickable {
-                                    posts = posts.filter { it.user_id != authorId }
-                                    CoroutineScope(Dispatchers.IO).launch { try { api.blockUser(BlockRequest(authorId)) } catch (_: Exception) {} }
-                                })
+                                var menuOpen by remember { mutableStateOf(false) }
+                                Box {
+                                    IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(28.dp)) {
+                                        Icon(Icons.Filled.Menu, contentDescription = "Options", tint = TextMuted, modifier = Modifier.size(18.dp))
+                                    }
+                                    DropdownMenu(
+                                        expanded = menuOpen,
+                                        onDismissRequest = { menuOpen = false },
+                                        shape = RoundedCornerShape(16.dp),
+                                        containerColor = Color(0xFF2B2733),
+                                        tonalElevation = 0.dp,
+                                        shadowElevation = 8.dp,
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("Report", color = Color.White, fontSize = 15.sp) },
+                                            leadingIcon = { Icon(Icons.Outlined.Flag, contentDescription = null, tint = Color.White) },
+                                            onClick = { menuOpen = false; reportingPostId = post.forum_post_id },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("Block user", color = Color(0xFFEF4444), fontSize = 15.sp) },
+                                            leadingIcon = { Icon(Icons.Filled.Block, contentDescription = null, tint = Color(0xFFEF4444)) },
+                                            onClick = {
+                                                menuOpen = false
+                                                posts = posts.filter { it.user_id != authorId }
+                                                CoroutineScope(Dispatchers.IO).launch { try { api.blockUser(BlockRequest(authorId)) } catch (_: Exception) {} }
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
                         if (!post.media_urls.isNullOrEmpty()) {

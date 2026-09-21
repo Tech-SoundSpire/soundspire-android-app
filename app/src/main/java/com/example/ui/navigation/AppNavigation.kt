@@ -24,6 +24,7 @@ import com.example.ui.screens.CommunitiesScreen
 import com.example.ui.screens.CommunityDetailScreen
 import com.example.ui.screens.CompleteProfileScreen
 import com.example.ui.screens.ExploreScreen
+import com.example.ui.screens.GenreArtistsScreen
 import com.example.ui.screens.FeedScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.NotificationsScreen
@@ -68,6 +69,7 @@ object Routes {
     const val MODERATION = "moderation"
     const val ARTIST_CATALOG = "artist_catalog"
     const val ALBUM_DETAIL = "album_detail"
+    const val GENRE_ARTISTS = "genre_artists"
 }
 
 // Album reviews are keyed "album:{id}" and must open the album page; everything
@@ -209,7 +211,12 @@ fun AppNavigation(authViewModel: AuthViewModel) {
                     },
                     onReviewClick = { trackId -> navController.openReview(trackId) },
                     onArtistVoteClick = { uuid -> navController.navigate("${Routes.ARTIST_VOTE}/$uuid") },
-                    onArtistCommunityClick = { slug -> navController.navigate("${Routes.COMMUNITY_DETAIL}/$slug/about") }
+                    onArtistCommunityClick = { slug -> navController.navigate("${Routes.COMMUNITY_DETAIL}/$slug/about") },
+                    onGenreClick = { genreId, name ->
+                        val encoded = java.net.URLEncoder.encode(name, "UTF-8")
+                            .replace("+", "%20").replace("%2F", "-").replace("%2f", "-")
+                        navController.navigate("${Routes.GENRE_ARTISTS}/$genreId/$encoded")
+                    }
                 )
             }
             composable(Routes.FEED) {
@@ -340,6 +347,17 @@ fun AppNavigation(authViewModel: AuthViewModel) {
             composable("${Routes.ARTIST_VOTE}/{uuid}") { backStackEntry ->
                 val uuid = backStackEntry.arguments?.getString("uuid") ?: ""
                 ArtistVoteScreen(uuid = uuid, onBack = { navController.popBackStack() })
+            }
+            composable("${Routes.GENRE_ARTISTS}/{genreId}/{name}") { backStackEntry ->
+                val genreId = backStackEntry.arguments?.getString("genreId") ?: ""
+                val name = java.net.URLDecoder.decode(backStackEntry.arguments?.getString("name") ?: "", "UTF-8")
+                GenreArtistsScreen(
+                    genreId = genreId,
+                    genreName = name,
+                    onBack = { navController.popBackStack() },
+                    onArtistCommunityClick = { slug -> navController.navigate("${Routes.COMMUNITY_DETAIL}/$slug/about") },
+                    onArtistVoteClick = { uuid -> navController.navigate("${Routes.ARTIST_VOTE}/$uuid") },
+                )
             }
             composable("${Routes.COMMUNITY_DETAIL}/{slug}/{tab}") { backStackEntry ->
                 val slug = backStackEntry.arguments?.getString("slug") ?: ""
