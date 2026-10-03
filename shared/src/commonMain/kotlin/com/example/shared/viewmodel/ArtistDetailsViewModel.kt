@@ -50,14 +50,14 @@ class ArtistDetailsViewModel(private val api: SoundSpireApi, private val soundch
                 api.getArtistIdentifiers(soundchartsUuid).items.mapNotNull { id ->
                     val platform = (id.platformName ?: id.platform ?: "").lowercase()
                     val url = id.url ?: ""
-                    if (url.isNotBlank() && platform in listOf("instagram", "youtube", "facebook", "twitter", "x", "tiktok"))
+                    if (url.isNotBlank() && platform in listOf("spotify", "instagram", "youtube", "facebook", "twitter", "x", "tiktok"))
                         ArtistSocial(if (platform == "x") "twitter" else platform, url) else null
                 }.distinctBy { it.platform }
             }.getOrDefault(emptyList())
             _state.value = _state.value.copy(
                 loadingPrefill = false, isLoggedIn = loggedIn,
                 prefillName = name, prefillBio = bio, prefillImage = image,
-                prefillSocials = socials.ifEmpty { listOf(ArtistSocial("instagram", ""), ArtistSocial("youtube", "")) },
+                prefillSocials = socials.ifEmpty { listOf(ArtistSocial("spotify", ""), ArtistSocial("instagram", ""), ArtistSocial("youtube", "")) },
             )
         }
     }

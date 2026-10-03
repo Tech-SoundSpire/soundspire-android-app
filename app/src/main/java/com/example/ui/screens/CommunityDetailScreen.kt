@@ -299,6 +299,7 @@ private fun CommunityAboutTab(
             if (artist?.community?.name != null) {
                 Text(artist.community!!.name!!, color = TextMuted, fontSize = 13.sp, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             }
+            SocialLinksRow(artist?.socials.orEmpty())
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -406,5 +407,41 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
         Text(title, color = TextWhite, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         Spacer(modifier = Modifier.height(10.dp))
         content()
+    }
+}
+
+// Artist social links as a row of brand icons, same platforms as the website community page.
+// Unknown platforms are skipped (matches web).
+@Composable
+private fun SocialLinksRow(socials: List<com.example.data.remote.ArtistSocial>) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+    val items = socials.mapNotNull { s ->
+        val icon = when (s.platform.lowercase()) {
+            "youtube" -> com.example.R.drawable.ic_social_youtube
+            "instagram" -> com.example.R.drawable.ic_social_instagram
+            "twitter", "x" -> com.example.R.drawable.ic_social_x
+            "facebook" -> com.example.R.drawable.ic_social_facebook
+            "tiktok" -> com.example.R.drawable.ic_social_tiktok
+            "spotify" -> com.example.R.drawable.ic_social_spotify
+            else -> null
+        }
+        if (icon == null || s.url.isBlank()) null else icon to s
+    }
+    if (items.isEmpty()) return
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
+    ) {
+        items.forEach { (icon, s) ->
+            Icon(
+                painter = androidx.compose.ui.res.painterResource(icon),
+                contentDescription = s.platform,
+                tint = TextWhite,
+                modifier = Modifier.size(24.dp).clickable {
+                    val url = if (s.url.startsWith("http")) s.url else "https://${s.url}"
+                    runCatching { uriHandler.openUri(url) }
+                },
+            )
+        }
     }
 }

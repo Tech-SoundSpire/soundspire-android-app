@@ -113,7 +113,7 @@ fun ArtistDetailsScreen(
     var remoteCities by remember { mutableStateOf<List<com.example.data.remote.CityResult>>(emptyList()) }
     var cityQuery by remember { mutableStateOf("") }
 
-    var socials by remember { mutableStateOf(listOf(ArtistSocial("instagram", ""), ArtistSocial("youtube", ""))) }
+    var socials by remember { mutableStateOf(listOf(ArtistSocial("spotify", ""), ArtistSocial("instagram", ""), ArtistSocial("youtube", ""))) }
 
     var profileUri by remember { mutableStateOf<Uri?>(null) }
     var coverUri by remember { mutableStateOf<Uri?>(null) }
@@ -141,7 +141,7 @@ fun ArtistDetailsScreen(
             val mapped = ids.mapNotNull { id ->
                 val platform = (id.platformName ?: id.platform ?: "").lowercase()
                 val url = id.url ?: ""
-                if (platform.isNotBlank() && url.isNotBlank() && platform in listOf("instagram", "youtube", "facebook", "twitter", "x", "tiktok"))
+                if (platform.isNotBlank() && url.isNotBlank() && platform in listOf("spotify", "instagram", "youtube", "facebook", "twitter", "x", "tiktok"))
                     ArtistSocial(if (platform == "x") "twitter" else platform, url)
                 else null
             }.distinctBy { it.platform }
@@ -346,7 +346,7 @@ fun ArtistDetailsScreen(
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { socials = socials + ArtistSocial("instagram", "") }.padding(vertical = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { socials = socials + ArtistSocial("link", "") }.padding(vertical = 4.dp)) {
                 Icon(Icons.Default.Add, null, tint = ArtistOrange, modifier = Modifier.size(16.dp))
                 TText("Add Link", color = ArtistOrange, fontSize = 13.sp)
             }
@@ -457,7 +457,7 @@ private fun VerificationDialog(onContinue: () -> Unit) {
             Spacer(modifier = Modifier.height(16.dp))
             TText("Artist Profile Created!", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
-            TText("We've sent a verification email. Please verify your email, then log in.", color = TextMuted, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp))
+            TText("We've sent a verification email. Please verify your email. The SoundSpire team will then review your profile and be in touch.", color = TextMuted, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp))
             Spacer(modifier = Modifier.height(24.dp))
             Button(onClick = onContinue, colors = ButtonDefaults.buttonColors(containerColor = ArtistOrange), shape = RoundedCornerShape(8.dp)) {
                 TText("Go to Artist Login", color = Color.White, fontWeight = FontWeight.Bold)

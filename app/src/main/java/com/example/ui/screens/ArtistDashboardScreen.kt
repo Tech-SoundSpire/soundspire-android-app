@@ -385,7 +385,7 @@ fun ArtistDashboardScreen(
                                 IconButton(onClick = { editSocials = editSocials.filterIndexed { j, _ -> j != i } }) { Icon(Icons.Default.Close, null, tint = Color.Red.copy(alpha = 0.7f), modifier = Modifier.size(16.dp)) }
                             }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { editSocials = editSocials + ArtistSocial("instagram", "") }.padding(vertical = 4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { editSocials = editSocials + ArtistSocial("link", "") }.padding(vertical = 4.dp)) {
                             Icon(Icons.Default.Add, null, tint = ArtistOrange, modifier = Modifier.size(16.dp)); Text("Add Link", color = ArtistOrange, fontSize = 13.sp)
                         }
                     }
