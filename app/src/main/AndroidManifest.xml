@@ -16,12 +16,28 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:label="@string/app_name"
             android:theme="@style/Theme.MyApplication">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Android App Links: open community and review pages in the app. Verified via
+                 https://app.soundspire.online/.well-known/assetlinks.json. Keep these paths in
+                 sync with appLinkRoute() in AppNavigation.kt. Login, admin, download and email
+                 links are deliberately not claimed, so they stay in the browser. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="https" android:host="app.soundspire.online" />
+                <data android:pathPrefix="/community/" />
+                <data android:pathPrefix="/reviews/song/" />
+                <data android:pathPrefix="/reviews/album/" />
             </intent-filter>
         </activity>
     </application>

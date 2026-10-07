@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +84,31 @@ fun androidx.navigation.NavController.openReview(reviewTrackId: String) {
     }
 }
 
+// Maps an https://app.soundspire.online link (Android App Link) to an in-app route, or null
+// if the app has no screen for it. Paths must match the intent filter in AndroidManifest.xml.
+private val COMMUNITY_TABS = setOf("about", "forum", "all-chat", "fan-art", "suggestions")
+
+fun appLinkRoute(uri: android.net.Uri): String? {
+    if (uri.scheme != "https" || uri.host != "app.soundspire.online") return null
+    val seg = uri.pathSegments
+    fun enc(s: String) = android.net.Uri.encode(s)
+    return when {
+        seg.size >= 2 && seg[0] == "community" -> {
+            val tab = seg.getOrNull(2)?.takeIf { it in COMMUNITY_TABS } ?: "about"
+            "${Routes.COMMUNITY_DETAIL}/${enc(seg[1])}/$tab"
+        }
+        seg.size == 3 && seg[0] == "reviews" && seg[1] == "song" -> "${Routes.REVIEW_DETAIL}/${enc(seg[2])}"
+        seg.size == 3 && seg[0] == "reviews" && seg[1] == "album" -> "${Routes.ALBUM_DETAIL}/${enc(seg[2])}"
+        else -> null
+    }
+}
+
+// Screens a pending link must wait behind: login and onboarding always run first.
+private val PRE_APP_ROUTES = listOf(
+    Routes.LOGIN, Routes.SIGNUP, Routes.COMPLETE_PROFILE, Routes.PREFERENCES,
+    Routes.ARTIST_ONBOARDING, Routes.ARTIST_LOGIN, Routes.FIND_ARTIST, Routes.ARTIST_DETAILS,
+)
+
 val bottomNavRoutes = listOf(
     Routes.EXPLORE,
     Routes.FEED,
@@ -93,7 +119,11 @@ val bottomNavRoutes = listOf(
 )
 
 @Composable
-fun AppNavigation(authViewModel: AuthViewModel) {
+fun AppNavigation(
+    authViewModel: AuthViewModel,
+    pendingLink: android.net.Uri? = null,
+    onLinkHandled: () -> Unit = {},
+) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
@@ -124,6 +154,16 @@ fun AppNavigation(authViewModel: AuthViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val showBottomNav = currentRoute in bottomNavRoutes
+
+    // Open a pending App Link once the user is past login/onboarding (so a link never skips
+    // them). Unknown paths are dropped and the app just stays where it is.
+    LaunchedEffect(pendingLink, currentRoute, isLoggedIn) {
+        val link = pendingLink ?: return@LaunchedEffect
+        val route = currentRoute ?: return@LaunchedEffect
+        if (!isLoggedIn || PRE_APP_ROUTES.any { route.startsWith(it) }) return@LaunchedEffect
+        appLinkRoute(link)?.let { runCatching { navController.navigate(it) } }
+        onLinkHandled()
+    }
 
     Scaffold(
         containerColor = BackgroundDarkPurple,
